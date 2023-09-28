@@ -4,6 +4,7 @@ authors = ["Anchal Gupta <guptaa@fusion.gat.com>"]
 version = "0.1.0"
 
 [deps]
+EFIT = "cda752c5-6b03-55a3-9e33-132a441b0c17"
 GGDUtils = "b7b5e640-9b39-4803-84eb-376048795def"
 OMAS = "91cfaa06-6526-4804-8666-b540b3feef2f"
 PhysicalConstants = "5ad8b20f-a522-5ce9-bfc9-ddf1d5bda6ab"
