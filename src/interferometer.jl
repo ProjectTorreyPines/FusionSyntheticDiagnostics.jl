@@ -2,6 +2,8 @@ import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, e
 import SD4SOLPS: fill_in_extrapolated_core_profile!, check_rho_1d,
     add_rho_to_equilibrium!, core_profile_2d
 import QuadGK: quadgk
+using GGDUtils
+using SOLPS2IMAS: SOLPS2IMAS
 
 default_ifo = "$(@__DIR__)/default_interferometer.json"
 
@@ -51,7 +53,7 @@ end
   - Calculate phase_to_n_e_line if not present for each wavelength
   - Compute the line integrated electron density if not present
 """
-function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
+function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1.0)
     for ch ∈ ids.interferometer.channel
         k = [2 * π / ch.wavelength[ii].value for ii ∈ 1:2]
         for i1 ∈ 1:2
@@ -75,6 +77,10 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
             ch.n_e_line_average.time = zeros(nt)
             ch.n_e_line.data = zeros(nt)
             ch.n_e_line_average.data = zeros(nt)
+            for lam ∈ ch.wavelength
+                lam.phase_corrected.time = zeros(nt)
+                lam.phase_corrected.data = zeros(nt)
+            end
             # Check if equilibrium data contains rho, if not add it
             if !check_rho_1d(ids; time_slice=1)
                 add_rho_to_equilibrium!(ids)
@@ -111,23 +117,55 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
                 end
             end
             fix_eq_time_idx = length(ids.equilibrium.time_slice) == 1
+            fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
             for ii ∈ eachindex(epggd)
                 ch.n_e_line.time[ii] = epggd[ii].time
                 ch.n_e_line_average.time[ii] = epggd[ii].time
                 eq_time_idx = fix_eq_time_idx ? 1 : ii
+                ep_grid_ggd_idx = fix_ep_grid_ggd_idx ? 1 : ii
+                ep_grid_ggd = ids.edge_profiles.grid_ggd[ep_grid_ggd_idx]
+                ep_space = ep_grid_ggd.space[1]
+                cells = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 5)
+                core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
+                sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
+
+                sep_core = OMAS.edge_profiles__grid_ggd___grid_subset()
+                sep_core.element =
+                    SOLPS2IMAS.subset_do(
+                        intersect,
+                        SOLPS2IMAS.get_subset_boundary(ep_space, sol),
+                        SOLPS2IMAS.get_subset_boundary(ep_space, core),
+                    )
+
+                SOLPS_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+                SOLPS_bnd.element = SOLPS2IMAS.get_subset_boundary(ep_space, cells)
+                ep_kdtree = get_kdtree(ep_space)
+                ep_n_e = interp(
+                    get_prop_with_grid_subset_index(epggd[ii].electrons.density, 5),
+                    ep_kdtree,
+                )
                 integrand(s) =
-                    core_profile_2d(
+                    n_e(
                         ids,
                         ii,
                         eq_time_idx,
-                        "electrons.density",
+                        sep_core,
+                        SOLPS_bnd,
+                        ep_space,
+                        ep_n_e,
                         los(s)...,
                     ) .* dl_ds(s)
-                println(integrand(0.5))
-                ch.n_e_line.data[ii] = quadgk(integrand, 0, 1, rtol)[1]
-                # TO DO: Following line should divide by length in plasma (core) region
+                println("Calculating integrated electron density")
+                @time ch.n_e_line.data[ii] = quadgk(integrand, 0, 1, rtol)[1]
+                println(ch.n_e_line.data[ii])
+                core_chord_integrand(s) =
+                    is_in_core(sep_core, ep_space, los(s)...) .* dl_ds(s)
+                println("Calculating core chord length")
+                @time core_chord_length = quadgk(core_chord_integrand, 0, 1, rtol)[1]
+                println(core_chord_length)
                 ch.n_e_line_average.data[ii] =
-                    ch.n_e_line.data[ii] / quadgk(dl_ds, 0, 1, rtol)[1]
+                    ch.n_e_line.data[ii] / core_chord_length
+                println("Average: ", ch.n_e_line_average.data[ii])
                 for lam ∈ ch.wavelength
                     lam.phase_corrected.time[ii] = epggd[ii].time
                     lam.phase_corrected.data[ii] =
@@ -150,4 +188,44 @@ end
 function xyz2rz(x::Float64, y::Float64, z::Float64)
     r = sqrt(x^2 + y^2)
     return r, z
+end
+
+function n_e(
+    @nospecialize(ids::OMAS.dd),
+    prof_time_idx::Int64,
+    eq_time_idx::Int64,
+    sep_core::OMAS.edge_profiles__grid_ggd___grid_subset,
+    SOLPS_bnd::OMAS.edge_profiles__grid_ggd___grid_subset,
+    ep_space::OMAS.edge_profiles__grid_ggd___space,
+    ep_n_e,
+    r::Float64,
+    z::Float64,
+)
+    if (r, z) ∈ (sep_core, ep_space)
+        return core_profile_2d(
+            ids,
+            prof_time_idx,
+            eq_time_idx,
+            "electrons.density",
+            r,
+            z,
+        )
+    elseif (r, z) ∈ (SOLPS_bnd, ep_space)
+        return ep_n_e(r, z)
+    else
+        return 0.0
+    end
+end
+
+function is_in_core(
+    sep_core::OMAS.edge_profiles__grid_ggd___grid_subset,
+    ep_space::OMAS.edge_profiles__grid_ggd___space,
+    r::Float64,
+    z::Float64,
+)
+    if (r, z) ∈ (sep_core, ep_space)
+        return 1.0
+    else
+        return 0.0
+    end
 end
