@@ -53,7 +53,7 @@ end
   - Calculate phase_to_n_e_line if not present for each wavelength
   - Compute the line integrated electron density if not present
 """
-function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1.0)
+function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
     for ch ∈ ids.interferometer.channel
         k = [2 * π / ch.wavelength[ii].value for ii ∈ 1:2]
         for i1 ∈ 1:2
@@ -125,7 +125,10 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1.0)
                 ep_grid_ggd_idx = fix_ep_grid_ggd_idx ? 1 : ii
                 ep_grid_ggd = ids.edge_profiles.grid_ggd[ep_grid_ggd_idx]
                 ep_space = ep_grid_ggd.space[1]
-                cells = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 5)
+                all_cells = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 5)
+                SOLPS_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+                SOLPS_bnd.element = SOLPS2IMAS.get_subset_boundary(ep_space, all_cells)
+                core_bnd = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 15)
                 core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
                 sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
 
@@ -137,22 +140,19 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1.0)
                         SOLPS2IMAS.get_subset_boundary(ep_space, core),
                     )
 
-                SOLPS_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-                SOLPS_bnd.element = SOLPS2IMAS.get_subset_boundary(ep_space, cells)
                 ep_kdtree = get_kdtree(ep_space)
                 ep_n_e = interp(
                     get_prop_with_grid_subset_index(epggd[ii].electrons.density, 5),
                     ep_kdtree,
                 )
+                cp_n_e = core_profile_2d(ids, ii, eq_time_idx, "electrons.density")
                 integrand(s) =
                     n_e(
-                        ids,
-                        ii,
-                        eq_time_idx,
-                        sep_core,
+                        cp_n_e,
+                        ep_n_e,
+                        core_bnd,
                         SOLPS_bnd,
                         ep_space,
-                        ep_n_e,
                         los(s)...,
                     ) .* dl_ds(s)
                 println("Calculating integrated electron density")
@@ -191,25 +191,16 @@ function xyz2rz(x::Float64, y::Float64, z::Float64)
 end
 
 function n_e(
-    @nospecialize(ids::OMAS.dd),
-    prof_time_idx::Int64,
-    eq_time_idx::Int64,
-    sep_core::OMAS.edge_profiles__grid_ggd___grid_subset,
+    cp_n_e::Function,
+    ep_n_e::Function,
+    core_bnd::OMAS.edge_profiles__grid_ggd___grid_subset,
     SOLPS_bnd::OMAS.edge_profiles__grid_ggd___grid_subset,
     ep_space::OMAS.edge_profiles__grid_ggd___space,
-    ep_n_e,
     r::Float64,
     z::Float64,
 )
-    if (r, z) ∈ (sep_core, ep_space)
-        return core_profile_2d(
-            ids,
-            prof_time_idx,
-            eq_time_idx,
-            "electrons.density",
-            r,
-            z,
-        )
+    if (r, z) ∈ (core_bnd, ep_space)
+        return cp_n_e(r, z)
     elseif (r, z) ∈ (SOLPS_bnd, ep_space)
         return ep_n_e(r, z)
     else
