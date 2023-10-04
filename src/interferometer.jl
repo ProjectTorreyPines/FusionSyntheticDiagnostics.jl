@@ -1,7 +1,7 @@
 import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, e
 import SD4SOLPS: fill_in_extrapolated_core_profile!, check_rho_1d,
     add_rho_to_equilibrium!, core_profile_2d
-import QuadGK: quadgk
+import QuadGK: quadgk, BatchIntegrand
 using GGDUtils
 using SOLPS2IMAS: SOLPS2IMAS
 
@@ -53,7 +53,7 @@ end
   - Calculate phase_to_n_e_line if not present for each wavelength
   - Compute the line integrated electron density if not present
 """
-function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
+function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-1)
     for ch ∈ ids.interferometer.channel
         k = [2 * π / ch.wavelength[ii].value for ii ∈ 1:2]
         for i1 ∈ 1:2
@@ -102,19 +102,21 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
                OMAS.interferometer__channel___line_of_sight__third_point()
                 los = (s::Float64) -> xyz2rz((fp .+ s .* (sp .- fp))...)
                 dl_ds = (s::Float64) -> sqrt(sum((sp .- fp) .^ 2))
+                chord_points = (fp, sp)
             else
                 los =
                     (s::Float64) ->
                         if s <= 0.5
                             return xyz2rz((fp .+ 2 * s .* (sp .- fp))...)
                         else
-                            return xyz2rz((sp .+ (s - 0.5) .* (tp .- sp))...)
+                            return xyz2rz((sp .+ 2 * (s - 0.5) .* (tp .- sp))...)
                         end
                 dl_ds = (s::Float64) -> if s <= 0.5
                     return sqrt(sum((2 .* (sp .- fp)) .^ 2))
                 else
                     return sqrt(sum((2 .* (sp .- tp)) .^ 2))
                 end
+                chord_points = (fp, sp, tp)
             end
             fix_eq_time_idx = length(ids.equilibrium.time_slice) == 1
             fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
@@ -140,6 +142,11 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
                         SOLPS2IMAS.get_subset_boundary(ep_space, core),
                     )
 
+                valid_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+                valid_bnd.element =
+                    SOLPS2IMAS.subset_do(setdiff, SOLPS_bnd.element, core_bnd.element)
+                valid_segs = get_intersections(valid_bnd, ep_space, chord_points, los)
+                println(valid_segs)
                 ep_kdtree = get_kdtree(ep_space)
                 ep_n_e = interp(
                     get_prop_with_grid_subset_index(epggd[ii].electrons.density, 5),
@@ -155,13 +162,35 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-6)
                         ep_space,
                         los(s)...,
                     ) .* dl_ds(s)
+                function integrand!(y, s)
+                    n = Threads.nthreads()
+                    Threads.@threads for i ∈ 1:n
+                        y[i:n:end] .= integrand.(@view(s[i:n:end]))
+                    end
+                end
                 println("Calculating integrated electron density")
+                ch.n_e_line.data[ii] = 0.0
+                # for seg ∈ valid_segs
+                #     @time ch.n_e_line.data[ii] +=
+                #         quadgk(
+                #             BatchIntegrand{Float64}(integrand!),
+                #             seg[1],
+                #             seg[2],
+                #             rtol,
+                #         )[1]
+                # end
                 @time ch.n_e_line.data[ii] = quadgk(integrand, 0, 1, rtol)[1]
                 println(ch.n_e_line.data[ii])
-                core_chord_integrand(s) =
-                    is_in_core(sep_core, ep_space, los(s)...) .* dl_ds(s)
-                println("Calculating core chord length")
-                @time core_chord_length = quadgk(core_chord_integrand, 0, 1, rtol)[1]
+                chord_in_core = get_intersections(sep_core, ep_space, chord_points, los)
+                core_chord_length = 0.0
+                for seg ∈ chord_in_core
+                    core_chord_length +=
+                        (seg[2] - seg[1]) * dl_ds((seg[1] + seg[2]) / 2)
+                end
+                # core_chord_integrand(s) =
+                #     is_in_core(sep_core, ep_space, los(s)...) .* dl_ds(s)
+                # println("Calculating core chord length")
+                # @time core_chord_length = quadgk(core_chord_integrand, 0, 1, rtol)[1]
                 println(core_chord_length)
                 ch.n_e_line_average.data[ii] =
                     ch.n_e_line.data[ii] / core_chord_length
@@ -208,15 +237,78 @@ function n_e(
     end
 end
 
-function is_in_core(
-    sep_core::OMAS.edge_profiles__grid_ggd___grid_subset,
-    ep_space::OMAS.edge_profiles__grid_ggd___space,
-    r::Float64,
-    z::Float64,
-)
-    if (r, z) ∈ (sep_core, ep_space)
-        return 1.0
+function get_intersections(subset, space, points, los)
+    nodes = space.objects_per_dimension[1].object
+    edges = space.objects_per_dimension[2].object
+    if length(points) == 2
+        fp, sp = points
+        three_points = false
     else
-        return 0.0
+        fp, sp, tp = points
+        three_points = true
     end
+    segs = [0.0]
+    for ele ∈ subset.element
+        edge = edges[ele.object[1].index]
+        e1 = Tuple(nodes[edge.nodes[1]].geometry)
+        e2 = Tuple(nodes[edge.nodes[2]].geometry)
+        s, s2 = intersection_s(e1, e2, fp, sp)
+        if 0 <= s < 1 && 0 <= s2 < 1
+            if three_points
+                append!(segs, s / 2)
+                s, s2 = intersection_s(e1, e2, sp, tp)
+                if 0 <= s < 1 && 0 <= s2 < 1
+                    append!(segs, s / 2 + 0.5)
+                end
+            else
+                append!(segs, s)
+            end
+        end
+    end
+    append!(segs, 1.0)
+    sort!(segs)
+    filt_segs = Tuple{Float64, Float64}[]
+    for ii ∈ 1:length(segs)-1
+        check_at = (segs[ii] + segs[ii+1]) / 2
+        # print("Seg : ", los(segs[ii]), " to ", los(segs[ii+1]), ", Mid: ")
+        # print(check_at, ": ", los(check_at), ": ")
+        if los(check_at) ∈ (subset, space)
+            append!(filt_segs, [(segs[ii], segs[ii+1])])
+            #     println("Present")
+            # else
+            #     println("Absent")
+        end
+    end
+    return filt_segs
+end
+
+function intersection_s(
+    fp::Tuple{Float64, Float64},
+    sp::Tuple{Float64, Float64},
+    l1::Tuple{Float64, Float64},
+    l2::Tuple{Float64, Float64},
+)
+    den1 = (sp[1] - fp[1]) * (l2[2] - l1[2]) - (sp[2] - fp[2]) * (l2[1] - l1[1])
+    num1 = (sp[1] - fp[1]) * (fp[2] - l1[2]) - (sp[2] - fp[2]) * (fp[1] - l1[1])
+    den2 = (l2[1] - l1[1]) * (sp[2] - fp[2]) - (l2[2] - l1[2]) * (sp[1] - fp[1])
+    num2 = (l2[1] - l1[1]) * (l1[2] - fp[2]) - (l2[2] - l1[2]) * (l1[1] - fp[1])
+    return num1 / den1, num2 / den2
+end
+
+function intersection_s(
+    fp::Tuple{Float64, Float64, Float64},
+    sp::Tuple{Float64, Float64, Float64},
+    l1::Tuple{Float64, Float64},
+    l2::Tuple{Float64, Float64},
+)
+    return intersection_s(xyz2rz(fp...), xyz2rz(sp...), l1, l2)
+end
+
+function intersection_s(
+    fp::Tuple{Float64, Float64},
+    sp::Tuple{Float64, Float64},
+    l1::Tuple{Float64, Float64, Float64},
+    l2::Tuple{Float64, Float64, Float64},
+)
+    return intersection_s(fp, sp, xyz2rz(l1...), xyz2rz(l2...))
 end
