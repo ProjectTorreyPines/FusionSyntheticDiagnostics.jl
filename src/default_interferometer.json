@@ -1,0 +1,122 @@
+{
+    "interferometer": {
+        "channel": [
+            {
+                "name": "V1",
+                "identifier": "V1",
+                "line_of_sight": {
+                    "first_point": {
+                        "phi": 0.0,
+                        "r": 5.0,
+                        "z": -5.0
+                    },
+                    "second_point": {
+                        "phi": 0.0,
+                        "r": 5.0,
+                        "z": 5.0
+                    },
+                    "third_point": {
+                        "phi": 0.0,
+                        "r": 5.0,
+                        "z": -5.0
+                    }
+                },
+                "wavelength": [
+                    {
+                        "value": 10.6e-6
+                    },
+                    {
+                        "value": 6.33e-7
+                    }
+                ]
+            },
+            {
+                "name": "V2",
+                "identifier": "V2",
+                "line_of_sight": {
+                    "first_point": {
+                        "phi": 0.0,
+                        "r": 6.0,
+                        "z": -5.0
+                    },
+                    "second_point": {
+                        "phi": 0.0,
+                        "r": 6.0,
+                        "z": 5.0
+                    },
+                    "third_point": {
+                        "phi": 0.0,
+                        "r": 6.0,
+                        "z": -5.0
+                    }
+                },
+                "wavelength": [
+                    {
+                        "value": 10.6e-6
+                    },
+                    {
+                        "value": 6.33e-7
+                    }
+                ]
+            },
+            {
+                "name": "V3",
+                "identifier": "V3",
+                "line_of_sight": {
+                    "first_point": {
+                        "phi": 0.0,
+                        "r": 7.0,
+                        "z": -5.0
+                    },
+                    "second_point": {
+                        "phi": 0.0,
+                        "r": 7.0,
+                        "z": 5.0
+                    },
+                    "third_point": {
+                        "phi": 0.0,
+                        "r": 7.0,
+                        "z": -5.0
+                    }
+                },
+                "wavelength": [
+                    {
+                        "value": 10.6e-6
+                    },
+                    {
+                        "value": 6.33e-7
+                    }
+                ]
+            },
+            {
+                "name": "H1",
+                "identifier": "H1",
+                "line_of_sight": {
+                    "first_point": {
+                        "phi": 0.0,
+                        "r": 9.0,
+                        "z": 0.0
+                    },
+                    "second_point": {
+                        "phi": 0.0,
+                        "r": 3.0,
+                        "z": 0.0
+                    },
+                    "third_point": {
+                        "phi": 0.0,
+                        "r": 9.0,
+                        "z": 0.0
+                    }
+                },
+                "wavelength": [
+                    {
+                        "value": 10.6e-6
+                    },
+                    {
+                        "value": 6.33e-7
+                    }
+                ]
+            }
+        ]
+    }
+}
