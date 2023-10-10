@@ -4,7 +4,6 @@ import SD4SOLPS: fill_in_extrapolated_core_profile!, check_rho_1d,
 import QuadGK: quadgk, BatchIntegrand
 using GGDUtils
 using SOLPS2IMAS: SOLPS2IMAS
-using ProgressBars: ProgressBar
 
 default_ifo = "$(@__DIR__)/default_interferometer.json"
 
@@ -18,7 +17,8 @@ default_ifo = "$(@__DIR__)/default_interferometer.json"
 Add interferometer to IMAS structure using a JSON file and compute the
 line integrated electron density if not present
 """
-function add_interferometer!(config::String=default_ifo,
+function add_interferometer!(
+    config::String=default_ifo,
     @nospecialize(ids::OMAS.dd)=OMAS.dd(),
 )::OMAS.dd
     if endswith(config, ".json")
@@ -40,7 +40,8 @@ end
 Add interferometer to IMAS structure using a Dict and compute the line integrated
 electron density if not present
 """
-function add_interferometer!(config::Dict{Symbol, Any},
+function add_interferometer!(
+    config::Dict{Symbol, Any},
     @nospecialize(ids::OMAS.dd)=OMAS.dd(),
 )::OMAS.dd
     OMAS.dict2imas(config, ids)
@@ -54,33 +55,13 @@ end
   - Calculate phase_to_n_e_line if not present for each wavelength
   - Compute the line integrated electron density if not present
 """
-function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-1)
+function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
     fix_eq_time_idx = length(ids.equilibrium.time_slice) == 1
     fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
 
     ep_grid_ggd = ids.edge_profiles.grid_ggd[1]
     ep_space = ep_grid_ggd.space[1]
-    all_cells = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 5)
-    SOLPS_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-    SOLPS_bnd.element = SOLPS2IMAS.get_subset_boundary(ep_space, all_cells)
-    core_bnd = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 15)
-    core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
-    sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
-
-    cp_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-    cp_bnd.element =
-        SOLPS2IMAS.subset_do(
-            intersect,
-            SOLPS2IMAS.get_subset_boundary(ep_space, sol),
-            SOLPS2IMAS.get_subset_boundary(ep_space, core),
-        )
-    SOLPS_out_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-    SOLPS_out_bnd.element =
-        SOLPS2IMAS.subset_do(setdiff, SOLPS_bnd.element, core_bnd.element)
-    ep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-    ep_bnd.element =
-        SOLPS2IMAS.subset_do(union, SOLPS_out_bnd.element, cp_bnd.element)
-
+    sep_bnd, core_bnd = get_sep_core_bnd(ep_grid_ggd)
     TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, 5)
 
     ep_n_e_list = []
@@ -132,69 +113,25 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-1)
             tp = rzphi2xyz(ch.line_of_sight.third_point)
             if ch.line_of_sight.third_point ==
                OMAS.interferometer__channel___line_of_sight__third_point()
-                los = (s::Float64) -> xyz2rz((fp .+ s .* (sp .- fp))...)
-                dl_ds = (s::Float64) -> sqrt(sum((sp .- fp) .^ 2))
                 chord_points = (fp, sp)
             else
-                los =
-                    (s::Float64) ->
-                        if s <= 0.5
-                            return xyz2rz((fp .+ 2 * s .* (sp .- fp))...)
-                        else
-                            return xyz2rz((sp .+ 2 * (s - 0.5) .* (tp .- sp))...)
-                        end
-                dl_ds = (s::Float64) -> if s <= 0.5
-                    return sqrt(sum((2 .* (sp .- fp)) .^ 2))
-                else
-                    return sqrt(sum((2 .* (sp .- tp)) .^ 2))
-                end
                 chord_points = (fp, sp, tp)
             end
-
-            # ep_segs = get_intersections(ep_bnd, ep_space, chord_points, los)
-            # cp_segs = get_intersections(cp_bnd, ep_space, chord_points, los)
+            los, dl_ds = get_line_of_sight(chord_points)
+            core_chord_length = get_core_chord_length(sep_bnd, ep_space, chord_points)
 
             for ii ∈ eachindex(epggd)
                 ch.n_e_line.time[ii] = epggd[ii].time
                 ch.n_e_line_average.time[ii] = epggd[ii].time
                 eq_time_idx = fix_eq_time_idx ? 1 : ii
                 if !fix_ep_grid_ggd_idx
+                    # If grid_ggd is evolving with time, update boundaries
                     ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
                     ep_space = ep_grid_ggd.space[1]
-                    all_cells = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 5)
-                    SOLPS_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-                    SOLPS_bnd.element =
-                        SOLPS2IMAS.get_subset_boundary(ep_space, all_cells)
-                    core_bnd = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 15)
-                    core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
-                    sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
-
-                    cp_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-                    cp_bnd.element =
-                        SOLPS2IMAS.subset_do(
-                            intersect,
-                            SOLPS2IMAS.get_subset_boundary(ep_space, sol),
-                            SOLPS2IMAS.get_subset_boundary(ep_space, core),
-                        )
-                    SOLPS_out_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-                    SOLPS_out_bnd.element =
-                        SOLPS2IMAS.subset_do(
-                            setdiff,
-                            SOLPS_bnd.element,
-                            core_bnd.element,
-                        )
-                    ep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-                    ep_bnd.element =
-                        SOLPS2IMAS.subset_do(
-                            union,
-                            SOLPS_out_bnd.element,
-                            cp_bnd.element,
-                        )
-
+                    sep_bnd, core_bnd = get_sep_core_bnd(ep_grid_ggd)
                     TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, 5)
-
-                    ep_segs = get_intersections(ep_bnd, ep_space, chord_points, los)
-                    cp_segs = get_intersections(cp_bnd, ep_space, chord_points, los)
+                    core_chord_length =
+                        get_core_chord_length(sep_bnd, ep_space, chord_points)
                 end
 
                 if length(ep_n_e_list) < ii
@@ -215,71 +152,17 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-1)
                 ep_n_e = ep_n_e_list[ii]
                 cp_n_e = cp_n_e_list[ii]
 
-                # integ_ep = (s) -> ep_n_e(los(s)...) * dl_ds(s)
-                # integ_cp = (s) -> cp_n_e.(los(s)...) * dl_ds(s)
-
-                # int_n_e = 0
-                # # println("In Edge Profiles:")
-                # for seg ∈ ep_segs
-                #     # println(seg[1], " to ", seg[2])
-                #     # println("Slope: ", dl_ds((seg[1] + seg[2]) / 2))
-                #     # println("Inegrand: ", integ_ep((seg[1] + seg[2]) / 2))
-                #     seg_int = quadgk(integ_ep, seg[1], seg[2]; rtol=rtol)[1]
-                #     int_n_e += seg_int
-                #     # println("This segment: ", seg_int, "Total: ", int_n_e)
-                # end
-                # # println("In Core Profiles:")
-                # for seg ∈ cp_segs
-                #     # println(seg[1], " to ", seg[2])
-                #     # println("Slope: ", dl_ds((seg[1] + seg[2]) / 2))
-                #     # println("Inegrand: ", integ_cp((seg[1] + seg[2]) / 2))
-                #     seg_int = quadgk(integ_cp, seg[1], seg[2]; rtol=rtol)[1]
-                #     int_n_e += seg_int
-                #     # println("This segment: ", seg_int, "Total: ", int_n_e)
-                # end
-                # ch.n_e_line.data[ii] = int_n_e
-                integrand(s) =
-                    n_e(
-                        cp_n_e,
-                        ep_n_e,
-                        core_bnd,
-                        SOLPS_bnd,
-                        ep_space,
-                        los(s)...,
-                    ) .* dl_ds(s)
-                # function integrand!(y, s)
-                #     n = Threads.nthreads()
-                #     Threads.@threads for i ∈ 1:n
-                #         y[i:n:end] .= integrand.(@view(s[i:n:end]))
-                #     end
-                # end
-                # println("Calculating integrated electron density")
-                # ch.n_e_line.data[ii] = 0.0
-                # for seg ∈ valid_segs
-                #     @time ch.n_e_line.data[ii] +=
-                #         quadgk(
-                #             BatchIntegrand{Float64}(integrand!),
-                #             seg[1],
-                #             seg[2],
-                #             rtol,
-                #         )[1]
-                # end
-                ch.n_e_line.data[ii] = quadgk(integrand, 0, 1; rtol=rtol)[1]
-                # println(ch.n_e_line.data[ii])
-                chord_in_core = get_intersections(cp_bnd, ep_space, chord_points, los)
-                core_chord_length = 0.0
-                for seg ∈ chord_in_core
-                    core_chord_length +=
-                        (seg[2] - seg[1]) * dl_ds((seg[1] + seg[2]) / 2)
+                function integrand(s::Real)
+                    r, z = los(s)
+                    if (r, z) ∈ (sep_bnd, ep_space)
+                        return cp_n_e(r, z) .* dl_ds(s)
+                    else
+                        return ep_n_e(r, z) .* dl_ds(s)
+                    end
                 end
-                # core_chord_integrand(s) =
-                #     is_in_core( cp_bnd, ep_space, los(s)...) .* dl_ds(s)
-                # println("Calculating core chord length")
-                # @time core_chord_length = quadgk(core_chord_integrand, 0, 1, rtol)[1]
-                # println(core_chord_length)
-                ch.n_e_line_average.data[ii] =
-                    ch.n_e_line.data[ii] / core_chord_length
-                # println("Average: ", ch.n_e_line_average.data[ii])
+
+                ch.n_e_line.data[ii] = quadgk(integrand, 0, 1; rtol=rtol)[1]
+                ch.n_e_line_average.data[ii] = ch.n_e_line.data[ii] / core_chord_length
                 for lam ∈ ch.wavelength
                     lam.phase_corrected.time[ii] = epggd[ii].time
                     lam.phase_corrected.data[ii] =
@@ -288,6 +171,22 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-1)
             end
         end
     end
+end
+
+function get_sep_core_bnd(ep_grid_ggd)
+    ep_space = ep_grid_ggd.space[1]
+    core_bnd = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 15)
+
+    core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
+    sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
+    sep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+    sep_bnd.element =
+        SOLPS2IMAS.subset_do(
+            intersect,
+            SOLPS2IMAS.get_subset_boundary(ep_space, sol),
+            SOLPS2IMAS.get_subset_boundary(ep_space, core),
+        )
+    return sep_bnd, core_bnd
 end
 
 function rzphi2xyz(
@@ -304,25 +203,33 @@ function xyz2rz(x::Float64, y::Float64, z::Float64)
     return r, z
 end
 
-function n_e(
-    cp_n_e::Function,
-    ep_n_e::Function,
-    core_bnd::OMAS.edge_profiles__grid_ggd___grid_subset,
-    SOLPS_bnd::OMAS.edge_profiles__grid_ggd___grid_subset,
-    ep_space::OMAS.edge_profiles__grid_ggd___space,
-    r::Float64,
-    z::Float64,
-)
-    if (r, z) ∈ (core_bnd, ep_space)
-        return cp_n_e(r, z)
-    else# if (r, z) ∈ (SOLPS_bnd, ep_space)
-        return ep_n_e(r, z)
-        # else
-        #     return 0.0
+function get_line_of_sight(points)
+    if length(points) == 2
+        fp, sp = points
+        los = (s::Float64) -> xyz2rz((fp .+ s .* (sp .- fp))...)
+        dl_ds = (s::Float64) -> sqrt(sum((sp .- fp) .^ 2))
+    else
+        fp, sp, tp = points
+        los =
+            (s::Float64) ->
+                if s <= 0.5
+                    return xyz2rz((fp .+ 2 * s .* (sp .- fp))...)
+                else
+                    return xyz2rz((sp .+ 2 * (s - 0.5) .* (tp .- sp))...)
+                end
+        dl_ds =
+            (s::Float64) ->
+                if s <= 0.5
+                    return sqrt(sum((2 .* (sp .- fp)) .^ 2))
+                else
+                    return sqrt(sum((2 .* (sp .- tp)) .^ 2))
+                end
     end
+    return los, dl_ds
 end
 
-function get_intersections(subset, space, points, los)
+function get_intersections(subset, space, points)
+    los, dl_ds = get_line_of_sight(points)
     nodes = space.objects_per_dimension[1].object
     edges = space.objects_per_dimension[2].object
     if length(points) == 2
@@ -355,13 +262,8 @@ function get_intersections(subset, space, points, los)
     filt_segs = Tuple{Float64, Float64}[]
     for ii ∈ 1:length(segs)-1
         check_at = (segs[ii] + segs[ii+1]) / 2
-        # print("Seg : ", los(segs[ii]), " to ", los(segs[ii+1]), ", Mid: ")
-        # print(check_at, ": ", los(check_at), ": ")
         if los(check_at) ∈ (subset, space)
             append!(filt_segs, [(segs[ii], segs[ii+1])])
-            #     println("Present")
-            # else
-            #     println("Absent")
         end
     end
     return filt_segs
@@ -396,4 +298,15 @@ function intersection_s(
     l2::Tuple{Float64, Float64, Float64},
 )
     return intersection_s(fp, sp, xyz2rz(l1...), xyz2rz(l2...))
+end
+
+function get_core_chord_length(sep_bnd, ep_space, chord_points)
+    los, dl_ds = get_line_of_sight(chord_points)
+    chord_in_core = get_intersections(sep_bnd, ep_space, chord_points)
+    core_chord_length = 0.0
+    for seg ∈ chord_in_core
+        center_of_seg = (seg[1] + seg[2]) / 2
+        core_chord_length += (seg[2] - seg[1]) * dl_ds(center_of_seg)
+    end
+    return core_chord_length
 end
