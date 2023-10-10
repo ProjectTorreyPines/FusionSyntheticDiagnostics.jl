@@ -1,0 +1,12 @@
+md5: 1d967bf4b5e9d024a87a249859dd10a1
+frozen: true
+deps:
+- path: ITER_Lore_2296_00000/EQDSK/g002296.00200
+  repo:
+    url: git@github.com:ProjectTorreyPines/SOLPSTestSamples.git
+    rev_lock: df499f1275428ec06175c48dc4af6ecbd5ec6117
+outs:
+- md5: 5ab3f75addd8f1191a49e5243c96d23d
+  size: 2167720
+  hash: md5
+  path: g002296.00200

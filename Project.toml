@@ -1,0 +1,13 @@
+name = "SynthDiag"
+uuid = "c6e34158-aa22-49e4-bb12-15cbcb518ce6"
+authors = ["Anchal Gupta <guptaa@fusion.gat.com>"]
+version = "0.1.0"
+
+[deps]
+EFIT = "cda752c5-6b03-55a3-9e33-132a441b0c17"
+GGDUtils = "b7b5e640-9b39-4803-84eb-376048795def"
+OMAS = "91cfaa06-6526-4804-8666-b540b3feef2f"
+PhysicalConstants = "5ad8b20f-a522-5ce9-bfc9-ddf1d5bda6ab"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+SD4SOLPS = "d8db6f1b-e564-4c04-bba3-ef399f78c070"
+SOLPS2IMAS = "09becab6-0636-4c23-a92a-2b3723265c31"
