@@ -1,13 +1,15 @@
 using SynthDiag: add_interferometer!
-using SD4SOLPS: preparation
+using OMAS: json2imas
 using Test
 using Printf
 
 @testset "interferometer" begin
-    eqdsk_file = "g002296.00200"
-    sample_dir = "$(@__DIR__)/../sample"
-    test_dir = mktempdir()
-    ids = preparation(eqdsk_file, sample_dir; filename=test_dir * "/output")
+    # eqdsk_file = "g002296.00200"
+    # sample_dir = "$(@__DIR__)/../sample"
+    # test_dir = mktempdir()
+    # ids = preparation(eqdsk_file, sample_dir; filename=test_dir * "/output")
+    ids =
+        json2imas("$(@__DIR__)/../sample/time_dep_edge_profiles_with_equilibrium.json")
     add_interferometer!("$(@__DIR__)/../src/default_interferometer.json", ids)
     # Just checking if the function runs through for now
     for ch ∈ ids.interferometer.channel
