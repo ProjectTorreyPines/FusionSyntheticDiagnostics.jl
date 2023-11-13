@@ -1,0 +1,12 @@
+md5: fb9792d06bb5d13f3a8803654b78624c
+frozen: true
+deps:
+- path: ITER_Lore_2296_00000/IMAS/time_dep_edge_profiles_with_interferometer.json
+  repo:
+    url: git@github.com:ProjectTorreyPines/SOLPSTestSamples.git
+    rev_lock: 80688afd131b17455c3320a4485bbf2b7a55c80c
+outs:
+- md5: 610272ceabe4a62dd776e0f3c08d2036
+  size: 40662828
+  hash: md5
+  path: time_dep_edge_profiles_with_interferometer.json
