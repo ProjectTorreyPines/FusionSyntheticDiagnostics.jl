@@ -13,7 +13,7 @@
                     "second_point": {
                         "phi": 0.0,
                         "r": 5.0,
-                        "z": 5.0
+                        "z": 6.0
                     },
                     "third_point": {
                         "phi": 0.0,
@@ -42,7 +42,7 @@
                     "second_point": {
                         "phi": 0.0,
                         "r": 6.0,
-                        "z": 5.0
+                        "z": 6.0
                     },
                     "third_point": {
                         "phi": 0.0,
@@ -71,7 +71,7 @@
                     "second_point": {
                         "phi": 0.0,
                         "r": 7.0,
-                        "z": 5.0
+                        "z": 6.0
                     },
                     "third_point": {
                         "phi": 0.0,
