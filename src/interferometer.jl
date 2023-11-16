@@ -1,9 +1,7 @@
 import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, e
-import SD4SOLPS: fill_in_extrapolated_core_profile!, check_rho_1d,
-    add_rho_to_equilibrium!, core_profile_2d
 import QuadGK: quadgk, BatchIntegrand
-using GGDUtils
-using SOLPS2IMAS: SOLPS2IMAS
+import GGDUtils:
+    interp, get_grid_subset_with_index, get_subset_boundary, subset_do, get_TPS_mats
 
 default_ifo = "$(@__DIR__)/default_interferometer.json"
 
@@ -62,7 +60,8 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
     ep_grid_ggd = ids.edge_profiles.grid_ggd[1]
     ep_space = ep_grid_ggd.space[1]
     sep_bnd, core_bnd = get_sep_core_bnd(ep_grid_ggd)
-    TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, 5)
+    # Using -5 for now to use the SOLPS edge profile grid only
+    TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, -5)
 
     ep_n_e_list = []
     cp_n_e_list = []
@@ -94,17 +93,15 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
                 lam.phase_corrected.time = zeros(nt)
                 lam.phase_corrected.data = zeros(nt)
             end
-            # Check if equilibrium data contains rho, if not add it
-            if !check_rho_1d(ids; time_slice=1)
-                add_rho_to_equilibrium!(ids)
-            end
-            # Check if core_profile is available, if not extrapolate from edge profile
-            if length(cpp1d) == 0
-                fill_in_extrapolated_core_profile(ids, "electrons.density")
-            elseif length(cpp1d) != length(epggd)
+
+            # Check if core_profile is available
+            if length(cpp1d) != length(epggd)
                 error(
                     "Number of edge profiles time slices does not match number of " \
-                    "core profile time slices",
+                    "core profile time slices. Please ensure core profile data for " \
+                    "electron density is present in the data structure. You might " \
+                    "want to run SD4SOLPS.fill_in_extrapolated_core_profile!" \
+                    "(dd, \"electrons.density\"; method=core_method))",
                 )
             end
             # Parametrize line of sight
@@ -134,6 +131,10 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
                         get_core_chord_length(sep_bnd, ep_space, chord_points)
                 end
 
+                # Note the grid_subset index 5 is used here to get the electron density
+                # data from SOLPS edge profile. This is a bug in SD4SOLPS. On adding
+                # edge extension, it should update all quantitites that refered to
+                # grid_subset index 5 to -5.
                 if length(ep_n_e_list) < ii
                     append!(
                         ep_n_e_list,
@@ -175,16 +176,15 @@ end
 
 function get_sep_core_bnd(ep_grid_ggd)
     ep_space = ep_grid_ggd.space[1]
-    core_bnd = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 15)
-
-    core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
-    sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
+    core_bnd = get_grid_subset_with_index(ep_grid_ggd, 15)
+    core = get_grid_subset_with_index(ep_grid_ggd, 22)
+    sol = get_grid_subset_with_index(ep_grid_ggd, 23)
     sep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
     sep_bnd.element =
-        SOLPS2IMAS.subset_do(
+        subset_do(
             intersect,
-            SOLPS2IMAS.get_subset_boundary(ep_space, sol),
-            SOLPS2IMAS.get_subset_boundary(ep_space, core),
+            get_subset_boundary(ep_space, sol),
+            get_subset_boundary(ep_space, core),
         )
     return sep_bnd, core_bnd
 end
