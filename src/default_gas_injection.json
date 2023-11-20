@@ -6,18 +6,18 @@
                 "pipe_indices": [
                     1
                 ],
-                "driblling_model": {
-                    "p1": 3.553e3, // Pa L/s
-                    "p2": 0.62, // 1/V
-                    "delta_on": 8e-3, // s
-                    "Gamma_s": 1.6568e2, // Pa L/s
-                    "tau_spike": 10.21e-3, // s
-                    "tau_on": 46.8e-3, // s
-                    "Gamma_over_0": 1.8090e1, // Pa L/s
-                    "tau_over": 680.8e-3, // s
-                    "tau_off1": 910.4e-3, // s
-                    "tau_off2": 174.1e-3, // s
-                    "D": 290.7e-3 // s
+                "dribbling_model": {
+                    "p1": 3.553e3,
+                    "p2": 0.62,
+                    "delta_on": 8e-3,
+                    "Gamma_s": 1.6568e2,
+                    "tau_spike": 10.21e-3,
+                    "tau_on": 46.8e-3,
+                    "Gamma_over_0": 0.09,
+                    "tau_over": 680.8e-3,
+                    "tau_off1": 910.4e-3,
+                    "tau_off2": 174.1e-3,
+                    "D": 290.7e-3
                 }
             }
         ],
