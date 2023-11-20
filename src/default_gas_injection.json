@@ -1,0 +1,44 @@
+{
+    "gas_injection": {
+        "valve": [
+            {
+                "name": "GASD",
+                "pipe_indices": [
+                    1
+                ],
+                "driblling_model": {
+                    "p1": 3.553e3, // Pa L/s
+                    "p2": 0.62, // 1/V
+                    "delta_on": 8e-3, // s
+                    "Gamma_s": 1.6568e2, // Pa L/s
+                    "tau_spike": 10.21e-3, // s
+                    "tau_on": 46.8e-3, // s
+                    "Gamma_over_0": 1.8090e1, // Pa L/s
+                    "tau_over": 680.8e-3, // s
+                    "tau_off1": 910.4e-3, // s
+                    "tau_off2": 174.1e-3, // s
+                    "D": 290.7e-3 // s
+                }
+            }
+        ],
+        "pipe": [
+            {
+                "name": "GASD",
+                "length": 0.1,
+                "exit_position": {
+                    "phi": 225.0,
+                    "z": 6.0,
+                    "r": 7.0
+                },
+                "second_point": {
+                    "phi": 225.0,
+                    "z": 6.03,
+                    "r": 7.0
+                },
+                "valve_indices": [
+                    1
+                ]
+            }
+        ]
+    }
+}
