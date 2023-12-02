@@ -1,4 +1,4 @@
-using SynthDiag: add_interferometer!
+using SynthDiag: add_interferometer!, add_langmuir_probes!
 using OMAS: json2imas
 using Test
 using Printf
@@ -22,6 +22,32 @@ using Printf
                 ch.n_e_line.time[ii],
                 ch.n_e_line.data[ii],
                 ch.n_e_line_average.data[ii]
+            )
+        end
+        println("-"^49)
+    end
+    @test true
+end
+
+@testset "langmuir_probes" begin
+    ids =
+        json2imas("$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json")
+    add_langmuir_probes!("$(@__DIR__)/../src/default_langmuir_probes.json", ids)
+    # Just checking if the function runs through for now
+    for lp ∈ ids.langmuir_probes.embedded
+        println()
+        println("-"^49)
+        println("-"^49)
+        println("Probe: $(lp.name)")
+        println("-"^49)
+        @printf("|%15s|%15s|%15s|\n", "time", "n_e", "t_e")
+        println("-"^49)
+        for ii ∈ eachindex(lp.time)
+            @printf(
+                "|%15.3e|%15.3e|%15.3e|\n",
+                lp.time[ii],
+                lp.n_e.data[ii],
+                lp.t_e.data[ii]
             )
         end
         println("-"^49)
