@@ -13,18 +13,22 @@ Add langmuir_probes positions and other paramters to ids structure
 """
 function add_langmuir_probes!(
     config::String=default_lp,
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
+    @nospecialize(ids::OMAS.dd)=OMAS.dd(); kwargs...,
 )::OMAS.dd
     if endswith(config, ".json")
         OMAS.json2imas(config, ids)
     else
         error("Only JSON files are supported.")
     end
-    compute_langmuir_probes(ids)
+    compute_langmuir_probes(ids; kwargs...)
     return ids
 end
 
-function compute_langmuir_probes(ids::OMAS.dd)
+function compute_langmuir_probes(
+    ids::OMAS.dd;
+    ne_noise::Union{Noise, Nothing}=nothing,
+    te_noise::Union{Noise, Nothing}=nothing,
+)
     epggd = ids.edge_profiles.ggd
     nt = length(epggd)
     fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
@@ -52,6 +56,16 @@ function compute_langmuir_probes(ids::OMAS.dd)
             emb_lp.time[ii] = epggd[ii].time
             emb_lp.n_e.data[ii] = ep_n_e(emb_lp.position.r, emb_lp.position.z)
             emb_lp.t_e.data[ii] = ep_t_e(emb_lp.position.r, emb_lp.position.z)
+        end
+    end
+    if ne_noise !== nothing
+        for emb_lp ∈ ids.langmuir_probes.embedded
+            emb_lp.n_e.data .+= generate_noise(ne_noise, emb_lp.time)
+        end
+    end
+    if te_noise !== nothing
+        for emb_lp ∈ ids.langmuir_probes.embedded
+            emb_lp.t_e.data .+= generate_noise(te_noise, emb_lp.time)
         end
     end
 end

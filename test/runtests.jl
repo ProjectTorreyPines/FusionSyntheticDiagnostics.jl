@@ -1,4 +1,4 @@
-using SynthDiag: add_interferometer!, add_langmuir_probes!
+using SynthDiag: add_interferometer!, add_langmuir_probes!, Noise
 using OMAS: json2imas
 using Test
 using Printf
@@ -32,7 +32,17 @@ end
 @testset "langmuir_probes" begin
     ids =
         json2imas("$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json")
-    add_langmuir_probes!("$(@__DIR__)/../src/default_langmuir_probes.json", ids)
+    # Assume a 5% noise level in ne values
+    ff = 0.0:0.1:1000
+    df = ff[2] - ff[1]
+    lpf = [f < 10.0 ? 1.0 : 100.0 * f^(-2) for f ∈ ff]
+    ne_noise_power = 1e14 * df * lpf
+    ne_noise = Noise(ne_noise_power, ff)
+    add_langmuir_probes!(
+        "$(@__DIR__)/../src/default_langmuir_probes.json",
+        ids;
+        ne_noise=ne_noise,
+    )
     # Just checking if the function runs through for now
     for lp ∈ ids.langmuir_probes.embedded
         println()
