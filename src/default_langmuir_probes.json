@@ -1,0 +1,16 @@
+{
+    "langmuir_probes": {
+        "embedded": [
+            {
+                "name": "LP1",
+                "identifier": "LP1",
+                "position": {
+                    "phi": 0.0,
+                    "r": 5.5,
+                    "z": -5.0
+                },
+                "surface_area": 1.6e-5
+            }
+        ]
+    }
+}
