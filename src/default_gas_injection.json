@@ -13,10 +13,7 @@
                     "Gamma_s": 0.16568,
                     "tau_spike": 10.21e-3,
                     "tau_on": 46.8e-3,
-                    "gain_on": 0.18608,
                     "damping_on": 0.8,
-                    "Gamma_over_0": 0.09,
-                    "tau_over": 680.8e-3,
                     "tau_off1": 910.4e-3,
                     "tau_off2": 174.1e-3,
                     "D": 290.7e-3

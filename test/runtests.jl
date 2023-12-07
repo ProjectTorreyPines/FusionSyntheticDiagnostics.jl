@@ -117,7 +117,7 @@ if args["gas_injection"]
             "Sinusoidal Excitation",
             "$(@__DIR__)/gas_injection_sine.png",
         )
-        step_excitation(t) = 0.1
+        step_excitation(t) = 0.6
         test_gas_response(
             config,
             step_excitation,
@@ -130,6 +130,13 @@ if args["gas_injection"]
             noise_excitation,
             "Noise Excitation",
             "$(@__DIR__)/gas_injection_noise.png",
+        )
+        start_stop_excitation(t) = (1.0 < t < 1.5 || 2.0 < t < 2.5) ? 0.6 : 0.0
+        test_gas_response(
+            config,
+            start_stop_excitation,
+            "Start-Stop Excitation",
+            "$(@__DIR__)/gas_injection_start_stop.png",
         )
         @test true
     end
