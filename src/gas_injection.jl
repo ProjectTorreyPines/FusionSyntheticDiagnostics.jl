@@ -1,5 +1,7 @@
 using JSON: JSON
 import Interpolations: linear_interpolation
+import DSP.Filters: Biquad, bilinear, convert, SecondOrderSections, DF2TFilter
+import DSP: filt
 
 default_gas_injection = "$(@__DIR__)/default_gas_injection.json"
 
@@ -23,67 +25,55 @@ function compute_gas_injection!(ids::OMAS.dd, valves::Vector{Any})
         valve = ids.gas_injection.valve[vid]
         if length(valve.voltage.data) > length(valve.flow_rate.data)
             println("Computing flow rate for valve $(valve.name)")
-            start_ind = length(valve.flow_rate.data) + 1
-            end_ind = length(valve.voltage.data)
             t = valve.voltage.time
             cmd = valve.voltage.data
             if haskey(valves[vid], "dribbling_model")
                 dbm = valves[vid]["dribbling_model"]
                 println("Using dribbling_model")
-                if length(valve.flow_rate.data) == 0
-                    # Initialize dribbling model state variables
-                    for key ∈ ["Gamma_main"]
-                        dbm[key] = []
-                    end
-                    valve.flow_rate.data = [0.0]
-                    valve.flow_rate.time = [t[1]]
-                    start_ind = 2
-                    dbm["t0"] = Inf
-                    Gamma_end = (t) -> 0.0
-                end
 
-                if dbm["t0"] == Inf
-                    for ii ∈ start_ind:end_ind
-                        if cmd[ii] > 0
-                            dbm["t0"] = valve.voltage.time[ii] # First time valve opens
-                            break
-                        end
+                # Find time segments of on and off stages
+                time_seg_inds = []
+                last_start = 1
+                for ii ∈ 2:length(cmd)
+                    if cmd[ii] == 0 && cmd[ii-1] > 0 || cmd[ii] > 0 && cmd[ii-1] == 0
+                        append!(time_seg_inds, [(last_start, ii - 1)])
+                        last_start = ii
                     end
                 end
-                Gamma_spike =
-                    (t) ->
-                        if t > dbm["t0"] + dbm["delta_on"]
-                            dt = dbm["t0"] + dbm["delta_on"] - t
-                            return dbm["Gamma_s"] * exp(dt / dbm["tau_spike"])
-                        else
-                            return 0.0  # Do nothing before command time + on delay
-                        end
-                for ii ∈ start_ind:end_ind
-                    command_step = cmd[ii] - cmd[ii-1]
-                    append!(
-                        dbm["Gamma_main"],
-                        [get_Gamma_main(t[ii], command_step, dbm)],
-                    )
-                    total_Gamma_main = cumulate_Gamma(dbm["Gamma_main"])
-                    Gamma_end = update_Gamma_end(
-                        Gamma_end,
-                        t[ii],
-                        cmd[ii-1:ii],
-                        dbm)
-                    append!(
-                        valve.flow_rate.data,
-                        Gamma_spike(t[ii]) + total_Gamma_main(t[ii]) +
-                        Gamma_end(t[ii]),
-                    )
-                    append!(valve.flow_rate.time, t[ii])
+                append!(time_seg_inds, [(last_start, length(cmd))])
+
+                dead_time_shift = round(Int64, dbm["delta_on"] / (t[2] - t[1]))
+                valve.flow_rate.data = zeros(Float64, dead_time_shift)
+                popped = [false]
+                for ts ∈ time_seg_inds
+                    t_seg = t[ts[1]:ts[2]]
+                    c_seg = cmd[ts[1]:ts[2]]
+                    if ts[1] == 1
+                        start_val = 0.0
+                    else
+                        start_val = valve.flow_rate.data[end]
+                    end
+                    if cmd[ts[1]] == 0
+                        append!(
+                            valve.flow_rate.data,
+                            get_Gamma_end(dbm, t_seg, start_val),
+                        )
+                    else
+                        append!(
+                            valve.flow_rate.data,
+                            get_Gamma_main(dbm, t_seg, c_seg, start_val, popped),
+                        )
+                    end
                 end
+                valve.flow_rate.data = valve.flow_rate.data[1:length(cmd)]
+                valve.flow_rate.time = t
             elseif length(valve.response_curve.flow_rate) ==
                    length(valve.response_curve.voltage) > 1
                 valve_response = linear_interpolation(
                     valve.response_curve.voltage,
                     valve.response_curve.flow_rate,
                 )
-                for ii ∈ start_ind:end_ind
+                for ii ∈ eachindex(cmd)
                     append!(
                         valve.flow_rate.data,
                         valve_response(cmd[ii]),
@@ -99,59 +89,44 @@ function instant_gas_model(command, config)
     return config["p1"] .* (sqrt.(((command .* config["p2"]) .^ 2.0 .+ 1) .- 1))
 end
 
-function get_Gamma_main(command_time, command_step, dbm)
-    Gamma_0 = instant_gas_model(command_step, dbm) * sign(command_step)
-    function Gamma_main(t)
-        if t > command_time + dbm["delta_on"] && Gamma_0 != 0.0
-            dt = command_time + dbm["delta_on"] - t
-            decay_on = (1 - exp(dt / dbm["tau_on"]))
-            decay_over = (1 + dbm["Gamma_over_0"] * exp(dt / dbm["tau_over"]))
-            return Gamma_0 * decay_on * decay_over
-        else
-            return 0.0 # Do nothing before command time + on delay
-        end
+function get_Gamma_end(dbm, time_seg, start_val)
+    if time_seg[end] - time_seg[1] < dbm["D"]
+        return start_val * exp.((time_seg[1] .- time_seg) / dbm["tau_off1"])
+    else
+        change_ind = findfirst(time_seg .> time_seg[1] + dbm["D"])
+        t1 = time_seg[1:change_ind-1]
+        t2 = time_seg[change_ind:end]
+        ret = start_val * exp.((time_seg[1] .- t1) / dbm["tau_off1"])
+        ret = append!(ret, ret[end] * exp.((t1[end] .- t2) / dbm["tau_off2"]))
+        return ret
     end
-    return Gamma_main
 end
 
-function update_Gamma_end(
-    Gamma_end,
-    command_time,
-    command_recent_two,
-    dbm,
-)
-    if command_recent_two[1] > 0 && command_recent_two[2] == 0
-        Gamma_main_array = copy(dbm["Gamma_main"])
-        cum_Gamma_main = cumulate_Gamma(Gamma_main_array)
-        Gamma_end =
-            (t) -> begin
-                start_main_val = cum_Gamma_main(command_time + dbm["delta_on"])
-                if t < command_time + dbm["delta_on"]
-                    return 0.0 # Do nothing before command time + on delay
-                elseif t >= command_time + dbm["delta_on"] + dbm["D"] # End2 case
-                    last_end1_val = start_main_val * exp(-dbm["D"] / dbm["tau_off1"])
-                    dt = command_time + dbm["delta_on"] + dbm["D"] - t
-                    return last_end1_val * exp(dt / dbm["tau_off2"]) - cum_Gamma_main(t)
-                else # End1 case
-                    dt = command_time + dbm["delta_on"] - t
-                    return start_main_val * exp(dt / dbm["tau_off1"]) -
-                           cum_Gamma_main(t)
-                end
-            end
-    elseif command_recent_two[2] > 0 && command_recent_two[1] == 0
-        # Return identical zero if valve is turned back on
-        Gamma_end = (t) -> 0.0
-    end
-    return Gamma_end
+function get_filter(fs, tau, damping, gain, si=zeros(Float64, 2, 1))
+    omega_n = 2π / tau
+    b = [0.0, 0.0, omega_n^2] .* gain
+    a = [2 * damping * omega_n, omega_n^2]
+    filter_s = DSP.Filters.Biquad{:s}(b..., a...)
+    filter_z = convert(SecondOrderSections, bilinear(filter_s, fs))
+    return DF2TFilter(filter_z, si)
 end
 
-function cumulate_Gamma(Gamma_array)
-    function cum_Gamma(t)
-        sum = 0.0
-        for Gamma ∈ Gamma_array
-            sum += Gamma(t)
-        end
-        return sum
+function get_Gamma_main(dbm, t_seg, c_seg, start_val, popped)
+    fs = 1 / (t_seg[2] - t_seg[1])
+    si = zeros(Float64, 2, 1)
+    si[1] = start_val
+    main_filter = get_filter(
+        fs,
+        dbm["tau_on"],
+        dbm["damping_on"],
+        dbm["p1"] * dbm["p2"],
+        si,
+    )
+    if popped[1]
+        return filt(main_filter, c_seg)
+    else
+        spike = dbm["Gamma_s"] * exp.((t_seg[1] .- t_seg) ./ dbm["tau_spike"])
+        popped[1] = true
+        return filt(main_filter, c_seg) + spike
     end
-    return cum_Gamma
 end
