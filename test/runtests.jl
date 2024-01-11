@@ -110,12 +110,20 @@ end
 if args["gas_injection"]
     @testset "gas_injection" begin
         config = "$(@__DIR__)/../src/default_gas_injection.json"
-        sine_excitation(t) = 0.1 * sin.(2 * pi * 2 * t) .+ 0.1
+        sine_excitation(t) = 0.3 * cos.(2 * pi * 2 * t) .+ 0.3
         test_gas_response(
             config,
             sine_excitation,
             "Sinusoidal Excitation",
             "$(@__DIR__)/gas_injection_sine.png",
+        )
+        sine_noise_excitation(t) =
+            max(0, 0.2 * cos.(2 * pi * 2 * t) .+ 0.3 + 0.1 * randn())
+        test_gas_response(
+            config,
+            sine_noise_excitation,
+            "Noisy Sinusoidal Excitation",
+            "$(@__DIR__)/gas_injection_sine_noise.png",
         )
         step_excitation(t) = 0.6
         test_gas_response(
@@ -124,7 +132,7 @@ if args["gas_injection"]
             "Step Excitation",
             "$(@__DIR__)/gas_injection_step.png",
         )
-        noise_excitation(t) = 0.1 * (0.1 * randn() + 2)
+        noise_excitation(t) = max(0.1 * (1 * randn() + 6), 0.0)
         test_gas_response(
             config,
             noise_excitation,

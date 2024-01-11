@@ -51,21 +51,43 @@ function compute_gas_injection!(ids::OMAS.dd, valves::Vector{Any})
                 dbm = valves[vid]["dribbling_model"]
                 println("Using dribbling_model")
 
-                # Find time segments of on and off stages
+                # Find time segments of main and dribble flow stages
                 time_seg_inds = []
+                Δt = t[2] - t[1]
+                drop_cutoff = -(Δt) ./ dbm["tau_off1"]
+                d_cmd = diff(cmd)
+                log_cmd = log.(cmd)
+                d_log_cmd = map(
+                    x -> isinf(x) ? (x > 0 ? -2 * drop_cutoff : -100) : x,
+                    map(x -> isnan(x) ? 0 : x, diff(log_cmd)),
+                )
+                lpf = get_filter(1 / Δt, Δt * 10, sqrt(2), 1)
+                filt_d_cmd = filt(lpf, d_cmd)
+                d_t = diff(t)
+                cmp = (-d_t ./ dbm["tau_off1"]) - filt(lpf, d_log_cmd)
+
                 last_start = 1
-                for ii ∈ 2:length(cmd)
-                    if cmd[ii] == 0 && cmd[ii-1] > 0 || cmd[ii] > 0 && cmd[ii-1] == 0
+                time_seg_inds = []
+                toggle = true
+                for ii ∈ 3:length(cmp)
+                    # if ii > last_start + 10
+                    if filt_d_cmd[ii-1] <= 0 && filt_d_cmd[ii] > 0 && toggle
                         append!(time_seg_inds, [(last_start, ii - 1)])
                         last_start = ii
+                        toggle = false
+                    elseif !toggle && cmp[ii-2] <= 0 && cmp[ii-1] > 0
+                        append!(time_seg_inds, [(last_start, ii - 1)])
+                        last_start = ii
+                        toggle = true
                     end
+                    # end
                 end
                 append!(time_seg_inds, [(last_start, length(cmd))])
 
                 dead_time_shift = round(Int64, dbm["delta_on"] / (t[2] - t[1]))
                 valve.flow_rate.data = zeros(Float64, dead_time_shift)
                 popped = [false]
-                for ts ∈ time_seg_inds
+                for (ii, ts) ∈ enumerate(time_seg_inds)
                     t_seg = t[ts[1]:ts[2]]
                     c_seg = cmd[ts[1]:ts[2]]
                     if ts[1] == 1
@@ -73,7 +95,7 @@ function compute_gas_injection!(ids::OMAS.dd, valves::Vector{Any})
                     else
                         start_val = valve.flow_rate.data[end]
                     end
-                    if cmd[ts[1]] == 0
+                    if ii % 2 == 1
                         append!(
                             valve.flow_rate.data,
                             get_Gamma_end(dbm, t_seg, start_val),
@@ -162,7 +184,6 @@ function get_filter(fs, tau, damping, gain)
     a = [2 * damping * ωₙ, ωₙ^2]
     filter_s = DSP.Filters.Biquad{:s}(b..., a...)
     return convert(SecondOrderSections, bilinear(filter_s, fs))
-    # return DF2TFilter(filter_z, si)
 end
 
 """
@@ -183,8 +204,7 @@ function get_Gamma_main(dbm, t_seg, c_seg, start_val, popped)
         dbm["damping_on"],     # oscillating < 0.707 < over-damped
         dbm["p1"] * dbm["p2"], # This takes the linear part of ideal gas injection
     ) # Returns SOS filter for main valve operation, no initial state
-    si = zeros(Float64, 2, 1)
-    si[1] = start_val / main_filter.g - main_filter.biquads[1].b0 * c_seg[1]
+    si = create_si(main_filter, start_val, c_seg[1])
     main_filter_sf = DF2TFilter(main_filter, si) # Stateful filter with start value
     if popped[1]
         return filt(main_filter_sf, c_seg)
@@ -193,4 +213,26 @@ function get_Gamma_main(dbm, t_seg, c_seg, start_val, popped)
         popped[1] = true
         return filt(main_filter_sf, c_seg) + spike
     end
+end
+
+"""
+    create_si(filter, last_val)
+
+Create initial state for a filter based on a provided last value. This assumes that
+upto this point, there was a constant command on (called prev_xi in this code) and the
+filter had reached equilibrium to a constant output which is the last_val provided.
+"""
+function create_si(filter, last_val, next_cmd)
+    g = filter.g
+    b0 = filter.biquads[1].b0
+    b1 = filter.biquads[1].b1
+    b2 = filter.biquads[1].b2
+    a1 = filter.biquads[1].a1
+    a2 = filter.biquads[1].a2
+    si = zeros(Float64, 2, 1)
+    prev_yi = last_val / g
+    prev_xi = prev_yi * (1 + a1 + a2) / (b0 + b1 + b2)
+    si[2] = b2 * prev_xi - a2 * prev_yi
+    si[1] = si[2] + b1 * prev_xi - a1 * prev_yi
+    return si
 end
