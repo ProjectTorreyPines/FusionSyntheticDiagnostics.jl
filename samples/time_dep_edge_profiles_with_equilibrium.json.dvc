@@ -1,0 +1,12 @@
+md5: c323be561df2fd7057b611798041547c
+frozen: true
+deps:
+- path: ITER_Lore_2296_00000/IMAS/time_dep_edge_profiles_with_equilibrium.json
+  repo:
+    url: git@github.com:ProjectTorreyPines/SOLPSTestSamples.git
+    rev_lock: 1593ec15e791e8d1987a3aa6bafbf0a8968e2f08
+outs:
+- md5: a1848b5908bf756323fb3d03a2d2632c
+  size: 40580800
+  hash: md5
+  path: time_dep_edge_profiles_with_equilibrium.json

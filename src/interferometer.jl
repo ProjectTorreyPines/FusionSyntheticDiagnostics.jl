@@ -1,12 +1,3 @@
-import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, e
-import SD4SOLPS: fill_in_extrapolated_core_profile!, check_rho_1d,
-    add_rho_to_equilibrium!, core_profile_2d
-import QuadGK: quadgk, BatchIntegrand
-using GGDUtils
-using SOLPS2IMAS: SOLPS2IMAS
-
-default_ifo = "$(@__DIR__)/default_interferometer.json"
-
 """
     add_interferometer(
     @nospecialize(ids::OMAS.dd)=OMAS.dd(),
@@ -61,14 +52,35 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
 
     ep_grid_ggd = ids.edge_profiles.grid_ggd[1]
     ep_space = ep_grid_ggd.space[1]
-    sep_bnd, core_bnd = get_sep_core_bnd(ep_grid_ggd)
-    TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, 5)
+    sep_bnd = get_sep_bnd(ep_grid_ggd)
+    # Using -5 for now to use the SOLPS edge profile grid only
+    TPS_mats = get_TPS_mats(ep_grid_ggd, -5)
 
-    ep_n_e_list = []
-    cp_n_e_list = []
+    epggd = ids.edge_profiles.ggd
+    cpp1d = ids.core_profiles.profiles_1d
+    nt = length(epggd)
+
+    ep_n_e_list = [
+        interp(
+            epggd[ii].electrons.density,
+            update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, -5, TPS_mats),
+            5,
+            # Note the grid_subset index 5 is used here to get the electron density
+            # data from SOLPS edge profile. This is a bug in SD4SOLPS. On adding
+            # edge extension, it should update all quantitites that refered to
+            # grid_subset index 5 to -5.
+        ) for ii ∈ eachindex(epggd)
+    ]
+    cp_n_e_list = [
+        interp(
+            cpp1d[ii].electrons.density,
+            cpp1d[ii],
+            ids.equilibrium.time_slice[fix_eq_time_idx ? 1 : ii],
+        ) for ii ∈ eachindex(epggd)
+    ]
 
     for ch ∈ ids.interferometer.channel
-        k = [2 * π / ch.wavelength[ii].value for ii ∈ 1:2]
+        k = @SVector[2π / ch.wavelength[ii].value for ii ∈ 1:2]
         for i1 ∈ 1:2
             lam = ch.wavelength[i1]
             i2 = i1 % 2 + 1
@@ -83,9 +95,6 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
         end
         # Special case when measurement has not been made but edge profile data exists
         if length(ch.n_e_line.time) == 0 && length(ids.edge_profiles.ggd) > 0
-            epggd = ids.edge_profiles.ggd
-            cpp1d = ids.core_profiles.profiles_1d
-            nt = length(epggd)
             ch.n_e_line.time = zeros(nt)
             ch.n_e_line_average.time = zeros(nt)
             ch.n_e_line.data = zeros(nt)
@@ -94,17 +103,15 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
                 lam.phase_corrected.time = zeros(nt)
                 lam.phase_corrected.data = zeros(nt)
             end
-            # Check if equilibrium data contains rho, if not add it
-            if !check_rho_1d(ids; time_slice=1)
-                add_rho_to_equilibrium!(ids)
-            end
-            # Check if core_profile is available, if not extrapolate from edge profile
-            if length(cpp1d) == 0
-                fill_in_extrapolated_core_profile(ids, "electrons.density")
-            elseif length(cpp1d) != length(epggd)
+
+            # Check if core_profile is available
+            if length(cpp1d) != length(epggd)
                 error(
                     "Number of edge profiles time slices does not match number of " \
-                    "core profile time slices",
+                    "core profile time slices. Please ensure core profile data for " \
+                    "electron density is present in the data structure. You might " \
+                    "want to run SD4SOLPS.fill_in_extrapolated_core_profile!" \
+                    "(dd, \"electrons.density\"; method=core_method))",
                 )
             end
             # Parametrize line of sight
@@ -117,51 +124,35 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
             else
                 chord_points = (fp, sp, tp)
             end
-            los, dl_ds = get_line_of_sight(chord_points)
             core_chord_length = get_core_chord_length(sep_bnd, ep_space, chord_points)
 
             for ii ∈ eachindex(epggd)
                 ch.n_e_line.time[ii] = epggd[ii].time
                 ch.n_e_line_average.time[ii] = epggd[ii].time
-                eq_time_idx = fix_eq_time_idx ? 1 : ii
-                if !fix_ep_grid_ggd_idx
-                    # If grid_ggd is evolving with time, update boundaries
-                    ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
-                    ep_space = ep_grid_ggd.space[1]
-                    sep_bnd, core_bnd = get_sep_core_bnd(ep_grid_ggd)
-                    TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, 5)
-                    core_chord_length =
-                        get_core_chord_length(sep_bnd, ep_space, chord_points)
-                end
+                core_chord_length = update_core_chord_length(
+                    ii,
+                    fix_ep_grid_ggd_idx,
+                    ids,
+                    chord_points,
+                    core_chord_length,
+                )
 
-                if length(ep_n_e_list) < ii
-                    append!(
-                        ep_n_e_list,
-                        [interp(epggd[ii].electrons.density, TPS_mats_all_cells, 5)],
-                    )
-                end
-                if length(cp_n_e_list) < ii
-                    cp_p1d = ids.core_profiles.profiles_1d[ii]
-                    eqt = ids.equilibrium.time_slice[eq_time_idx]
-                    append!(
-                        cp_n_e_list,
-                        [interp(cp_p1d.electrons.density, cp_p1d, eqt)],
-                    )
-                end
+                integ =
+                    let chord_points = chord_points, sep_bnd = sep_bnd,
+                        ep_space = ep_space, cp_n_e = cp_n_e_list[ii],
+                        ep_n_e = ep_n_e_list[ii]
 
-                ep_n_e = ep_n_e_list[ii]
-                cp_n_e = cp_n_e_list[ii]
-
-                function integrand(s::Real)
-                    r, z = los(s)
-                    if (r, z) ∈ (sep_bnd, ep_space)
-                        return cp_n_e(r, z) .* dl_ds(s)
-                    else
-                        return ep_n_e(r, z) .* dl_ds(s)
+                        s -> integrand(
+                            s,
+                            chord_points,
+                            sep_bnd,
+                            ep_space,
+                            cp_n_e,
+                            ep_n_e,
+                        )
                     end
-                end
 
-                ch.n_e_line.data[ii] = quadgk(integrand, 0, 1; rtol=rtol)[1]
+                ch.n_e_line.data[ii] = quadgk(integ, 0, 1; rtol=rtol)[1]
                 ch.n_e_line_average.data[ii] = ch.n_e_line.data[ii] / core_chord_length
                 for lam ∈ ch.wavelength
                     lam.phase_corrected.time[ii] = epggd[ii].time
@@ -173,23 +164,30 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
     end
 end
 
-function get_sep_core_bnd(ep_grid_ggd)
-    ep_space = ep_grid_ggd.space[1]
-    core_bnd = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 15)
-
-    core = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 22)
-    sol = SOLPS2IMAS.get_grid_subset_with_index(ep_grid_ggd, 23)
-    sep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
-    sep_bnd.element =
-        SOLPS2IMAS.subset_do(
-            intersect,
-            SOLPS2IMAS.get_subset_boundary(ep_space, sol),
-            SOLPS2IMAS.get_subset_boundary(ep_space, core),
-        )
-    return sep_bnd, core_bnd
+function integrand(s::Real, chord_points, sep_bnd, ep_space, cp_n_e, ep_n_e)
+    r, z = line_of_sight(s, chord_points)
+    if (r, z) ∈ (sep_bnd, ep_space)
+        return cp_n_e(r, z) * dline(s, chord_points)
+    else
+        return ep_n_e(r, z) * dline(s, chord_points)
+    end
 end
 
-function rzphi2xyz(
+function get_sep_bnd(ep_grid_ggd)
+    ep_space = ep_grid_ggd.space[1]
+    core = get_grid_subset_with_index(ep_grid_ggd, 22)
+    sol = get_grid_subset_with_index(ep_grid_ggd, 23)
+    sep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+    sep_bnd.element =
+        subset_do(
+            intersect,
+            get_subset_boundary(ep_space, sol),
+            get_subset_boundary(ep_space, core),
+        )
+    return sep_bnd
+end
+
+@inline function rzphi2xyz(
     point::Union{OMAS.interferometer__channel___line_of_sight__first_point,
         OMAS.interferometer__channel___line_of_sight__second_point,
         OMAS.interferometer__channel___line_of_sight__third_point},
@@ -198,38 +196,70 @@ function rzphi2xyz(
     return r * cos(phi), r * sin(phi), z
 end
 
-function xyz2rz(x::Float64, y::Float64, z::Float64)
+@inline function xyz2rz(x::Float64, y::Float64, z::Float64)
     r = sqrt(x^2 + y^2)
     return r, z
 end
 
-function get_line_of_sight(points)
-    if length(points) == 2
-        fp, sp = points
-        los = (s::Float64) -> xyz2rz((fp .+ s .* (sp .- fp))...)
-        dl_ds = (s::Float64) -> sqrt(sum((sp .- fp) .^ 2))
+function update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, gsi, TPS_mats)
+    if !fix_ep_grid_ggd_idx
+        ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
+        return get_TPS_mats(ep_grid_ggd, gsi)
     else
-        fp, sp, tp = points
-        los =
-            (s::Float64) ->
-                if s <= 0.5
-                    return xyz2rz((fp .+ 2 * s .* (sp .- fp))...)
-                else
-                    return xyz2rz((sp .+ 2 * (s - 0.5) .* (tp .- sp))...)
-                end
-        dl_ds =
-            (s::Float64) ->
-                if s <= 0.5
-                    return sqrt(sum((2 .* (sp .- fp)) .^ 2))
-                else
-                    return sqrt(sum((2 .* (sp .- tp)) .^ 2))
-                end
+        return TPS_mats
     end
-    return los, dl_ds
+end
+
+@inline function line_of_sight(
+    s::Real,
+    points::Tuple{T, T},
+) where {T <: Tuple{Float64, Float64, Float64}}
+    fp, sp = points
+    x = fp[1] + s * (sp[1] - fp[1])
+    y = fp[2] + s * (sp[2] - fp[2])
+    z = fp[3] + s * (sp[3] - fp[3])
+    return xyz2rz(x, y, z)
+end
+
+@inline function line_of_sight(
+    s::Real,
+    points::Tuple{T, T, T},
+) where {T <: Tuple{Float64, Float64, Float64}}
+    fp, sp, tp = points
+    return if (s <= 0.5)
+        line_of_sight(2 * s, (fp, sp))
+    else
+        line_of_sight(2 * (s - 0.5), (tp, sp))
+    end
+end
+
+@inline function dline(
+    points::Tuple{T, T},
+) where {T <: Tuple{Float64, Float64, Float64}}
+    fp, sp = points
+    return sqrt((sp[1] - fp[1])^2 + (sp[2] - fp[2])^2 + (sp[3] - fp[3])^2)
+    # return sqrt(sum((sp[k] - fp[k])^2 for k ∈ eachindex(sp)))
+end
+
+@inline function dline(
+    s::Real,
+    points::Tuple{T, T},
+) where {T <: Tuple{Float64, Float64, Float64}}
+    fp, sp = points
+    return dline(points)
+end
+
+@inline function dline(
+    s::Real,
+    points::Tuple{T, T, T},
+) where {T <: Tuple{Float64, Float64, Float64}}
+    fp, sp, tp = points
+    p2, p1 = (s <= 0.5) ? (sp, fp) : (tp, sp)
+    return 2 * dline((p2, p1))
+    # return sqrt(2 * sum(((p2[k] - p1[k]))^2 for k ∈ eachindex(p2)))
 end
 
 function get_intersections(subset, space, points)
-    los, dl_ds = get_line_of_sight(points)
     nodes = space.objects_per_dimension[1].object
     edges = space.objects_per_dimension[2].object
     if length(points) == 2
@@ -262,7 +292,7 @@ function get_intersections(subset, space, points)
     filt_segs = Tuple{Float64, Float64}[]
     for ii ∈ 1:length(segs)-1
         check_at = (segs[ii] + segs[ii+1]) / 2
-        if los(check_at) ∈ (subset, space)
+        if line_of_sight(check_at, points) ∈ (subset, space)
             append!(filt_segs, [(segs[ii], segs[ii+1])])
         end
     end
@@ -301,12 +331,29 @@ function intersection_s(
 end
 
 function get_core_chord_length(sep_bnd, ep_space, chord_points)
-    los, dl_ds = get_line_of_sight(chord_points)
     chord_in_core = get_intersections(sep_bnd, ep_space, chord_points)
     core_chord_length = 0.0
     for seg ∈ chord_in_core
         center_of_seg = (seg[1] + seg[2]) / 2
-        core_chord_length += (seg[2] - seg[1]) * dl_ds(center_of_seg)
+        core_chord_length += (seg[2] - seg[1]) * dline(center_of_seg, chord_points)
     end
     return core_chord_length
+end
+
+function update_core_chord_length(
+    ii,
+    fix_ep_grid_ggd_idx,
+    ids,
+    chord_points,
+    core_chord_length,
+)
+    if !fix_ep_grid_ggd_idx
+        # If grid_ggd is evolving with time, update boundaries
+        ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
+        ep_space = ep_grid_ggd.space[1]
+        sep_bnd = get_sep_bnd(ep_grid_ggd)
+        return get_core_chord_length(sep_bnd, ep_space, chord_points)
+    else
+        return core_chord_length
+    end
 end
