@@ -1,0 +1,35 @@
+{
+    "interferometer": {
+        "channel": [
+            {
+                "name": "V1.5",
+                "identifier": "V1.5",
+                "line_of_sight": {
+                    "first_point": {
+                        "phi": 0.5,
+                        "r": 5.5,
+                        "z": -5.0
+                    },
+                    "second_point": {
+                        "phi": 0.5,
+                        "r": 5.5,
+                        "z": 6.0
+                    },
+                    "third_point": {
+                        "phi": 0.5,
+                        "r": 5.5,
+                        "z": -5.0
+                    }
+                },
+                "wavelength": [
+                    {
+                        "value": 10.6e-6
+                    },
+                    {
+                        "value": 6.33e-7
+                    }
+                ]
+            }
+        ]
+    }
+}
