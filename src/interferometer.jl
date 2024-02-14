@@ -1,3 +1,35 @@
+
+struct OverwriteAttemptError <: Exception
+    var::String
+end
+
+Base.showerror(io::IO, e::OverwriteAttemptError) = print(io, e.var)
+
+function convert_strings_to_symbols(d::Dict{String, Any})
+    new_d = Dict{Symbol, Any}()
+    for (k, v) ∈ d
+        if isa(v, Dict{String, Any})
+            new_d[Symbol(k)] = convert_strings_to_symbols(v)
+        elseif isa(v, Vector{Any})
+            if length(v) > 0
+                if isa(v[1], Dict{String, Any})
+                    new_d[Symbol(k)] = Vector{Dict{Symbol, Any}}(undef, length(v))
+                    for ii ∈ eachindex(v)
+                        new_d[Symbol(k)][ii] = convert_strings_to_symbols(v[ii])
+                    end
+                else
+                    new_d[Symbol(k)] = v
+                end
+            else
+                new_d[Symbol(k)] = v
+            end
+        else
+            new_d[Symbol(k)] = v
+        end
+    end
+    return new_d
+end
+
 """
     add_interferometer(
     @nospecialize(ids::OMAS.dd)=OMAS.dd(),
@@ -10,10 +42,12 @@ line integrated electron density if not present
 """
 function add_interferometer!(
     config::String=default_ifo,
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
+    @nospecialize(ids::OMAS.dd)=OMAS.dd();
+    overwrite::Bool=false, verbose::Bool=false,
 )::OMAS.dd
     if endswith(config, ".json")
-        OMAS.json2imas(config, ids)
+        config_dict = convert_strings_to_symbols(OMAS.JSON.parsefile(config))
+        add_interferometer!(config_dict, ids; overwrite=overwrite, verbose=verbose)
     else
         error("Only JSON files are supported.")
     end
@@ -33,9 +67,52 @@ electron density if not present
 """
 function add_interferometer!(
     config::Dict{Symbol, Any},
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
+    @nospecialize(ids::OMAS.dd)=OMAS.dd();
+    overwrite::Bool=false, verbose::Bool=false,
 )::OMAS.dd
-    OMAS.dict2imas(config, ids)
+    # Check for duplicates
+    if length(ids.interferometer.channel) > 0
+        duplicate_indices = []
+        new_channels = Dict(
+            ch[:name] => ch[:identifier] for
+            ch ∈ config[:interferometer][:channel]
+        )
+        for (ii, ch) ∈ enumerate(ids.interferometer.channel)
+            if ch.name in keys(new_channels) ||
+               ch.identifier in values(new_channels)
+                append!(duplicate_indices, ii)
+            end
+        end
+        if overwrite
+            for ii ∈ reverse(duplicate_indices)
+                println(
+                    "Overwriting interferometer channel ",
+                    "$(ids.interferometer.channel[ii].name)...",
+                )
+                deleteat!(ids.interferometer.channel, ii)
+            end
+        else
+            if length(duplicate_indices) > 0
+                err_msg =
+                    "Duplicate interferometer channels found with " *
+                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
+                for ii ∈ duplicate_indices
+                    err_msg *=
+                        "$(ids.interferometer.channel[ii].identifier): " *
+                        "$(ids.interferometer.channel[ii].name)\n"
+                end
+                err_msg *= "Use overwrite=true to replace them."
+                throw(OverwriteAttemptError(err_msg))
+            end
+        end
+        config[:interferometer] =
+            mergewith(
+                append!,
+                OMAS.imas2dict(ids.interferometer),
+                config[:interferometer],
+            )
+    end
+    OMAS.dict2imas(config, ids; verbose=verbose)
     compute_interferometer(ids)
     return ids
 end

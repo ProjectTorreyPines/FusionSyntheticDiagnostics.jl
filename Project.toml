@@ -4,6 +4,7 @@ authors = ["Anchal Gupta <guptaa@fusion.gat.com>"]
 version = "0.2.0"
 
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 GGDUtils = "b7b5e640-9b39-4803-84eb-376048795def"
 OMAS = "91cfaa06-6526-4804-8666-b540b3feef2f"
