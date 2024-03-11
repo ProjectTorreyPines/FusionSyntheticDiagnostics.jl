@@ -8,14 +8,19 @@ help:
 	@echo
 
 env_with_cloned_repo r:
+	@echo "Pulling sample files using dvc"
+	-dvc pull
 	@echo "Creating Julia environment by creating local clones of dependent repositories"
-	@echo "Cloning the repositories"
-	-cd ..; git clone "git@github.com:ProjectTorreyPines/OMAS.jl.git"
-	-cd ..; git clone "git@github.com:ProjectTorreyPines/GGDUtils.jl.git"
-	@echo "Generating Project.toml and Manifest.toml"
-	julia --project=. -e 'using Pkg; Pkg.rm(["OMAS", "GGDUtils"]); Pkg.develop(path="../OMAS.jl"); Pkg.develop(path="../GGDUtils.jl"); Pkg.instantiate()'
+	@echo "Cloning the repositories and generating Manifest.toml"
+	-dn=$(shell dirname $(shell pwd)); \
+	if [[ "$${dn:(-10)}" == ".julia/dev" ]]; then ext="" ; else ext=".jl";fi; \
+	git clone "git@github.com:ProjectTorreyPines/OMAS.jl.git" ../OMAS$${ext}; \
+	git clone "git@github.com:ProjectTorreyPines/GGDUtils.jl.git" ../GGDUtils$${ext}; \
+	julia --project=. -e 'using Pkg; Pkg.rm(["OMAS", "GGDUtils"]); Pkg.develop(path="../OMAS'$${ext}'"); Pkg.develop(path="../GGDUtils'$${ext}'"); Pkg.instantiate()'
 
 env_with_git_url u:
+	@echo "Pulling sample files using dvc"
+	-dvc pull
 	@echo "Creating Julia environment with the git urls without creating local clones"
 	@echo "Generating Project.toml and Manifest.toml"
 	julia --project=. -e 'using Pkg; Pkg.rm(["OMAS", "GGDUtils"]); Pkg.add(url="git@github.com:ProjectTorreyPines/OMAS.jl.git", rev="master");  Pkg.add(url="git@github.com:ProjectTorreyPines/GGDUtils.jl.git", rev="master"); Pkg.instantiate()'
