@@ -32,21 +32,21 @@ end
 
 """
     add_interferometer(
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
+    @nospecialize(ids::IMASDD.dd)=IMASDD.dd(),
     config::String=default_ifo,
 
-)::OMAS.dd
+)::IMASDD.dd
 
 Add interferometer to IMAS structure using a JSON file and compute the
 line integrated electron density if not present
 """
 function add_interferometer!(
     config::String=default_ifo,
-    @nospecialize(ids::OMAS.dd)=OMAS.dd();
+    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
     overwrite::Bool=false, verbose::Bool=false,
-)::OMAS.dd
+)::IMASDD.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(OMAS.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
         add_interferometer!(config_dict, ids; overwrite=overwrite, verbose=verbose)
     else
         error("Only JSON files are supported.")
@@ -57,19 +57,19 @@ end
 
 """
     add_interferometer(
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
+    @nospecialize(ids::IMASDD.dd)=IMASDD.dd(),
     config::Dict{Symbol, Any},
 
-)::OMAS.dd
+)::IMASDD.dd
 
 Add interferometer to IMAS structure using a Dict and compute the line integrated
 electron density if not present
 """
 function add_interferometer!(
     config::Dict{Symbol, Any},
-    @nospecialize(ids::OMAS.dd)=OMAS.dd();
+    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
     overwrite::Bool=false, verbose::Bool=false,
-)::OMAS.dd
+)::IMASDD.dd
     # Check for duplicates
     if length(ids.interferometer.channel) > 0
         duplicate_indices = []
@@ -108,22 +108,22 @@ function add_interferometer!(
         config[:interferometer] =
             mergewith(
                 append!,
-                OMAS.imas2dict(ids.interferometer),
+                IMASDD.imas2dict(ids.interferometer),
                 config[:interferometer],
             )
     end
-    OMAS.dict2imas(config, ids; verbose=verbose)
+    IMASDD.dict2imas(config, ids; verbose=verbose)
     compute_interferometer(ids)
     return ids
 end
 
 """
-    compute_interferometer(@nospecialize(ids::OMAS.dd))
+    compute_interferometer(@nospecialize(ids::IMASDD.dd))
 
   - Calculate phase_to_n_e_line if not present for each wavelength
   - Compute the line integrated electron density if not present
 """
-function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
+function compute_interferometer(@nospecialize(ids::IMASDD.dd), rtol::Float64=1e-3)
     fix_eq_time_idx = length(ids.equilibrium.time_slice) == 1
     fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
 
@@ -196,7 +196,7 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
             sp = rzphi2xyz(ch.line_of_sight.second_point)
             tp = rzphi2xyz(ch.line_of_sight.third_point)
             if ch.line_of_sight.third_point ==
-               OMAS.interferometer__channel___line_of_sight__third_point()
+               IMASDD.interferometer__channel___line_of_sight__third_point()
                 chord_points = (fp, sp)
             else
                 chord_points = (fp, sp, tp)
@@ -254,7 +254,7 @@ function get_sep_bnd(ep_grid_ggd)
     ep_space = ep_grid_ggd.space[1]
     core = get_grid_subset_with_index(ep_grid_ggd, 22)
     sol = get_grid_subset_with_index(ep_grid_ggd, 23)
-    sep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+    sep_bnd = IMASDD.edge_profiles__grid_ggd___grid_subset()
     sep_bnd.element =
         subset_do(
             intersect,
@@ -265,9 +265,9 @@ function get_sep_bnd(ep_grid_ggd)
 end
 
 @inline function rzphi2xyz(
-    point::Union{OMAS.interferometer__channel___line_of_sight__first_point,
-        OMAS.interferometer__channel___line_of_sight__second_point,
-        OMAS.interferometer__channel___line_of_sight__third_point},
+    point::Union{IMASDD.interferometer__channel___line_of_sight__first_point,
+        IMASDD.interferometer__channel___line_of_sight__second_point,
+        IMASDD.interferometer__channel___line_of_sight__third_point},
 )
     r, z, phi = point.r, point.z, point.phi
     return r * cos(phi), r * sin(phi), z

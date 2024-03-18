@@ -14,16 +14,16 @@ env_with_cloned_repo r:
 	@echo "Cloning the repositories and generating Manifest.toml"
 	-dn=$(shell dirname $(shell pwd)); \
 	if [[ "$${dn:(-10)}" == ".julia/dev" ]]; then ext="" ; else ext=".jl";fi; \
-	git clone "git@github.com:ProjectTorreyPines/OMAS.jl.git" ../OMAS$${ext}; \
+	git clone "git@github.com:ProjectTorreyPines/IMASDD.jl.git" ../IMASDD$${ext}; \
 	git clone "git@github.com:ProjectTorreyPines/GGDUtils.jl.git" ../GGDUtils$${ext}; \
-	julia --project=. -e 'using Pkg; Pkg.rm(["OMAS", "GGDUtils"]); Pkg.develop(path="../OMAS'$${ext}'"); Pkg.develop(path="../GGDUtils'$${ext}'"); Pkg.instantiate()'
+	julia --project=. -e 'using Pkg; Pkg.rm(["IMASDD", "GGDUtils"]); Pkg.develop(path="../IMASDD'$${ext}'"); Pkg.develop(path="../GGDUtils'$${ext}'"); Pkg.instantiate()'
 
 env_with_git_url u:
 	@echo "Pulling sample files using dvc"
 	-dvc pull
 	@echo "Creating Julia environment with the git urls without creating local clones"
 	@echo "Generating Project.toml and Manifest.toml"
-	julia --project=. -e 'using Pkg; Pkg.rm(["OMAS", "GGDUtils"]); Pkg.add(url="git@github.com:ProjectTorreyPines/OMAS.jl.git", rev="master");  Pkg.add(url="git@github.com:ProjectTorreyPines/GGDUtils.jl.git", rev="master"); Pkg.instantiate()'
+	julia --project=. -e 'using Pkg; Pkg.rm(["IMASDD", "GGDUtils"]); Pkg.add(url="git@github.com:ProjectTorreyPines/IMASDD.jl.git", rev="master");  Pkg.add(url="git@github.com:ProjectTorreyPines/GGDUtils.jl.git", rev="master"); Pkg.instantiate()'
 
 clean:
 	@echo "Deleting Manifest.toml"
