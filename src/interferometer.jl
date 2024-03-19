@@ -47,7 +47,7 @@ function add_interferometer!(
 )::IMASDD.dd
     if endswith(config, ".json")
         config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
-        add_interferometer!(config_dict, ids; overwrite=overwrite, verbose=verbose)
+        add_interferometer!(config_dict, ids; overwrite, verbose)
     else
         error("Only JSON files are supported.")
     end
@@ -112,7 +112,7 @@ function add_interferometer!(
                 config[:interferometer],
             )
     end
-    IMASDD.dict2imas(config, ids; verbose=verbose)
+    IMASDD.dict2imas(config, ids; verbose)
     compute_interferometer(ids)
     return ids
 end
@@ -229,7 +229,7 @@ function compute_interferometer(@nospecialize(ids::IMASDD.dd), rtol::Float64=1e-
                         )
                     end
 
-                ch.n_e_line.data[ii] = quadgk(integ, 0, 1; rtol=rtol)[1]
+                ch.n_e_line.data[ii] = quadgk(integ, 0, 1; rtol)[1]
                 ch.n_e_line_average.data[ii] = ch.n_e_line.data[ii] / core_chord_length
                 for lam ∈ ch.wavelength
                     lam.phase_corrected.time[ii] = epggd[ii].time

@@ -114,7 +114,7 @@ if args["langmuir_probes"]
         add_langmuir_probes!(
             "$(@__DIR__)/../src/default_langmuir_probes.json",
             ids;
-            ne_noise=ne_noise,
+            ne_noise,
         )
         # Just checking if the function runs through for now
         for lp ∈ ids.langmuir_probes.embedded
