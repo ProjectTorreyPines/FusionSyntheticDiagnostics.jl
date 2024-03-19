@@ -115,7 +115,8 @@ function init_data!(
         elseif f == :time || f == :time_within_plunge
             setproperty!(q, f, zeros(Float64, nt))
         elseif type_fobj <: AbstractArray
-            if eltype(fobj) <: IMASDD.langmuir_probes__reciprocating___plunge___collector
+            if eltype(fobj) <:
+               IMASDD.langmuir_probes__reciprocating___plunge___collector
                 init_data!.(fobj, nt)
             end
         end
