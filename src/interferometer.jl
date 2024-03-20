@@ -271,8 +271,8 @@ end
 
 function get_sep_bnd(ep_grid_ggd)
     ep_space = ep_grid_ggd.space[1]
-    core = get_grid_subset_with_index(ep_grid_ggd, 22)
-    sol = get_grid_subset_with_index(ep_grid_ggd, 23)
+    core = get_grid_subset(ep_grid_ggd, 22)
+    sol = get_grid_subset(ep_grid_ggd, 23)
     sep_bnd = IMASDD.edge_profiles__grid_ggd___grid_subset()
     sep_bnd.element =
         subset_do(
