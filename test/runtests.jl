@@ -31,7 +31,11 @@ if args["interferometer"]
             json2imas(
                 "$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json",
             )
-        add_interferometer!("$(@__DIR__)/../src/default_interferometer.json", ids)
+        add_interferometer!(
+            "$(@__DIR__)/../src/default_interferometer.json",
+            ids;
+            n_e_gsi=-5,
+        )
         # Just checking if the function runs through for now
         for ch ∈ ids.interferometer.channel
             println()
@@ -56,7 +60,7 @@ if args["interferometer"]
         try
             add_interferometer!(
                 "$(@__DIR__)/../samples/test_interferometer_same_names.json",
-                ids,
+                ids; n_e_gsi=-5,
             )
         catch err
             @test isa(err, OverwriteAttemptError)
@@ -65,7 +69,7 @@ if args["interferometer"]
         add_interferometer!(
             "$(@__DIR__)/../samples/test_interferometer_same_names.json",
             ids;
-            overwrite=true,
+            overwrite=true, n_e_gsi=-5,
         )
         @test ids.interferometer.channel[1].name == "V1"
         @test ids.interferometer.channel[1].line_of_sight.first_point.r == 5.2
@@ -74,6 +78,7 @@ if args["interferometer"]
         # Try appending new interfermeter channels
         add_interferometer!(
             "$(@__DIR__)/../samples/test_interferometer_new_channels.json", ids;
+            n_e_gsi=-5,
         )
         for ch ∈ ids.interferometer.channel
             println()
@@ -114,7 +119,8 @@ if args["langmuir_probes"]
         add_langmuir_probes!(
             "$(@__DIR__)/../src/default_langmuir_probes.json",
             ids;
-            ne_noise,
+            ne_noise=ne_noise,
+            n_e_gsi=-5,
         )
         # Just checking if the function runs through for now
         for lp ∈ ids.langmuir_probes.embedded
