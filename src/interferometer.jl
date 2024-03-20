@@ -117,7 +117,7 @@ function add_interferometer!(
                 config[:interferometer],
             )
     end
-    IMASDD.dict2imas(config, ids; verbose)
+    IMASDD.dict2imas(config, ids; verbose=verbose)
     compute_interferometer(ids; rtol=rtol, n_e_gsi=n_e_gsi)
     return ids
 end
