@@ -10,7 +10,7 @@ function Noise(time::Vector{Float64}, signal::Vector{Float64}, binwidth::Float64
     fs = 1 / (time[2] - time[1])
     nperseg = round(Int64, fs / binwidth)
     noverlap = div(nperseg, 2)
-    pgram = DSP.Periodograms.welch_pgram(signal, nperseg, noverlap; fs=fs)
+    pgram = DSP.Periodograms.welch_pgram(signal, nperseg, noverlap; fs)
     return Noise(pgram, time, signal)
 end
 
