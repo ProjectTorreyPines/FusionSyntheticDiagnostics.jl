@@ -28,16 +28,16 @@ function compute_langmuir_probes(
     ids::IMASDD.dd;
     ne_noise::Union{Noise, Nothing}=nothing,
     te_noise::Union{Noise, Nothing}=nothing,
+    n_e_gsi::Int=5,
 )
     epggd = ids.edge_profiles.ggd
     nt = length(epggd)
     fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
     ep_grid_ggd = ids.edge_profiles.grid_ggd[1]
-    # Using -5 for now to use the SOLPS edge profile grid only
-    TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, -5)
+    TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, n_e_gsi)
     # Get the edge profile interpolation functions
-    ep_n_e = interp(epggd[1].electrons.density, TPS_mats_all_cells, 5)
-    ep_t_e = interp(epggd[1].electrons.temperature, TPS_mats_all_cells, 5)
+    ep_n_e = interp(epggd[1].electrons.density, TPS_mats_all_cells, n_e_gsi)
+    ep_t_e = interp(epggd[1].electrons.temperature, TPS_mats_all_cells, n_e_gsi)
 
     # Initialize langmuir probe data
     init_data!.(ids.langmuir_probes.embedded, nt)
@@ -46,10 +46,11 @@ function compute_langmuir_probes(
         if !fix_ep_grid_ggd_idx && ii > 1
             # If grid_ggd is evolving with time, update boundaries
             ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
-            TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, -5)
+            TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, n_e_gsi)
             # Update the edge profile interpolation functions
-            ep_n_e = interp(epggd[ii].electrons.density, TPS_mats_all_cells, 5)
-            ep_t_e = interp(epggd[ii].electrons.temperature, TPS_mats_all_cells, 5)
+            ep_n_e = interp(epggd[ii].electrons.density, TPS_mats_all_cells, n_e_gsi)
+            ep_t_e =
+                interp(epggd[ii].electrons.temperature, TPS_mats_all_cells, n_e_gsi)
         end
 
         for emb_lp ∈ ids.langmuir_probes.embedded
