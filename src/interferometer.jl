@@ -161,7 +161,7 @@ function compute_interferometer(@nospecialize(ids::IMASDD.dd), rtol::Float64=1e-
         for i1 ∈ 1:2
             lam = ch.wavelength[i1]
             i2 = i1 % 2 + 1
-            if ismissing(lam, :phase_to_n_e_line)
+            if IMASDD.ismissing(lam, :phase_to_n_e_line)
                 # Taken from https://doi.org/10.1063/1.1138037
                 lam.phase_to_n_e_line =
                     (
@@ -171,7 +171,7 @@ function compute_interferometer(@nospecialize(ids::IMASDD.dd), rtol::Float64=1e-
             end
         end
         # Special case when measurement has not been made but edge profile data exists
-        if (ismissing(ch.n_e_line, :time) || isempty(ch.n_e_line.time)) &&
+        if (IMASDD.ismissing(ch.n_e_line, :time) || IMASDD.isempty(ch.n_e_line.time)) &&
            length(ids.edge_profiles.ggd) > 0
             ch.n_e_line.time = zeros(nt)
             ch.n_e_line_average.time = zeros(nt)

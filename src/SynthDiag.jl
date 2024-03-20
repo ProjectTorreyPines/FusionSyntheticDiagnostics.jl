@@ -1,6 +1,6 @@
 module SynthDiag
 
-using IMASDD: IMASDD
+import OMAS as IMASDD
 using StaticArrays
 import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, e
 import QuadGK: quadgk, BatchIntegrand

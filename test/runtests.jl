@@ -1,5 +1,5 @@
 using SynthDiag: add_interferometer!, add_langmuir_probes!, Noise, OverwriteAttemptError
-using IMASDD: json2imas
+using OMAS: json2imas
 using Test
 using Printf
 using ArgParse: ArgParse
