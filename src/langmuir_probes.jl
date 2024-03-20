@@ -107,7 +107,8 @@ function init_data!(
     },
     nt::Int64,
 )
-    for f ∈ fieldnames(typeof(q))
+    # make sure to initialize time before any other field
+    for f ∈ [:time; collect(fieldnames(typeof(q)))]
         fobj = getfield(q, f)
         type_fobj = typeof(fobj)
         if type_fobj <: lp_data_types
