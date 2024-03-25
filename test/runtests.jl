@@ -1,7 +1,9 @@
-using SynthDiag: add_interferometer!, add_langmuir_probes!, Noise, OverwriteAttemptError
+using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
+    compute_gas_injection!, Noise, OverwriteAttemptError
 using OMAS: json2imas
 using Test
 using Printf
+using Plots
 using ArgParse: ArgParse
 
 function parse_commandline()
@@ -13,6 +15,9 @@ function parse_commandline()
             :action => :store_true),
         ["--langmuir_probes"],
         Dict(:help => "Test only langmuir probes",
+            :action => :store_true),
+        ["--gas_injection"],
+        Dict(:help => "Test only gas injection",
             :action => :store_true),
     )
     args = ArgParse.parse_args(s)
@@ -141,6 +146,88 @@ if args["langmuir_probes"]
             end
             println("-"^49)
         end
+        @test true
+    end
+end
+
+function test_gas_response(config, excitation, plot_title, figname)
+    ids = IMASDD.dd()
+    add_gas_injection!(config, ids)
+    ttotal = 5
+    nt = Int(ttotal * 1000) + 1
+    tstart = 1.0
+    tstartind = Int(tstart * 1000) + 1
+    tend = 3.0
+    tendind = Int(tend * 1000) + 1
+    ids.gas_injection.valve[1].voltage.time = collect(LinRange(0, ttotal, nt))
+    ids.gas_injection.valve[1].voltage.data = zeros(nt)
+    ids.gas_injection.valve[1].voltage.data[tstartind:tendind] .=
+        excitation.(ids.gas_injection.valve[1].voltage.time[tstartind:tendind])
+
+    compute_gas_injection!(ids)
+
+    plot(
+        ids.gas_injection.valve[1].voltage.time,
+        ids.gas_injection.valve[1].voltage.data;
+        lw=2,
+        alpha=0.5,
+        label="Command Voltage / (Pa m^3/s)",
+    )
+
+    plot!(
+        ids.gas_injection.valve[1].flow_rate.time,
+        ids.gas_injection.valve[1].flow_rate.data;
+        lw=2,
+        label="Flow Rate / (Pa m^3/s)",
+    )
+    plot!(;
+        title=plot_title,
+        legend=true,
+        xlabel="Time (s)",
+        ylabel="Flow rate or Command Voltage",
+    )
+    return savefig(figname)
+end
+
+if args["gas_injection"]
+    @testset "gas_injection" begin
+        config = "$(@__DIR__)/../src/default_gas_injection.json"
+        sine_excitation(t) = 0.3 * cos.(2 * pi * 2 * t) .+ 0.3
+        test_gas_response(
+            config,
+            sine_excitation,
+            "Sinusoidal Excitation",
+            "$(@__DIR__)/gas_injection_sine.png",
+        )
+        sine_noise_excitation(t) =
+            max(0, 0.2 * cos.(2 * pi * 2 * t) .+ 0.3 + 0.1 * randn())
+        test_gas_response(
+            config,
+            sine_noise_excitation,
+            "Noisy Sinusoidal Excitation",
+            "$(@__DIR__)/gas_injection_sine_noise.png",
+        )
+        step_excitation(t) = 0.6
+        test_gas_response(
+            config,
+            step_excitation,
+            "Step Excitation",
+            "$(@__DIR__)/gas_injection_step.png",
+        )
+        noise_excitation(t) = max(0.1 * (1 * randn() + 6), 0.0)
+        test_gas_response(
+            config,
+            noise_excitation,
+            "Noise Excitation",
+            "$(@__DIR__)/gas_injection_noise.png",
+        )
+        start_stop_excitation(t) = (1.0 < t < 1.5 || 2.0 < t < 2.5) ? 0.6 : 0.0
+        test_gas_response(
+            config,
+            start_stop_excitation,
+            "Start-Stop Excitation",
+            "$(@__DIR__)/gas_injection_start_stop.png",
+        )
         @test true
     end
 end
