@@ -1,5 +1,5 @@
 using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
-    compute_gas_injection!, Noise, OverwriteAttemptError
+    compute_gas_injection, Noise, OverwriteAttemptError
 using OMAS: json2imas
 using Test
 using Printf
@@ -179,7 +179,7 @@ function test_gas_response(config, excitation, plot_title, figname)
         "GASD" => Dict(:latency => 0.183, :time_constant => 0.3, :damping => 0.8),
     )
 
-    compute_gas_injection!(ids; valves=valves)
+    compute_gas_injection(ids; valves=valves)
 
     plot(;
         title=plot_title,

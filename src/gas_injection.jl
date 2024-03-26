@@ -90,16 +90,16 @@ function add_gas_injection!(
     valves = Dict{String, Dict{Symbol, Any}}(
         valve[:name] => valve for valve ∈ config[:gas_injection][:valve]
     )
-    compute_gas_injection!(ids; valves=valves)
+    compute_gas_injection(ids; valves=valves)
     return ids
 end
 
 """
-    compute_gas_injection!(ids::IMASDD.dd)
+    compute_gas_injection(ids::IMASDD.dd)
 
 Compute the gas flow rate based on the command signal in the gas valves.
 """
-function compute_gas_injection!(
+function compute_gas_injection(
     ids::IMASDD.dd;
     valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
 )
