@@ -87,7 +87,10 @@ function add_gas_injection!(
             )
     end
     IMASDD.dict2imas(config, ids; verbose=verbose)
-    compute_gas_injection!(ids)
+    valves = Dict{String, Dict{Symbol, Any}}(
+        valve[:name] => valve for valve ∈ config[:gas_injection][:valve]
+    )
+    compute_gas_injection!(ids; valves=valves)
     return ids
 end
 
@@ -96,7 +99,18 @@ end
 
 Compute the gas flow rate based on the command signal in the gas valves.
 """
-function compute_gas_injection!(ids::IMASDD.dd)
+function compute_gas_injection!(
+    ids::IMASDD.dd;
+    valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
+)
+    if IMASDD.ismissing(ids.gas_injection, :latency)
+        global_latency = 0.0
+    elseif IMASDD.isempty(ids.gas_injection.latency)
+        global_latency = 0.0
+    else
+        global_latency = ids.gas_injection.latency
+    end
+
     for valve ∈ ids.gas_injection.valve
         proceed =
             !IMASDD.ismissing(valve.response_curve, :flow_rate) &&
@@ -137,12 +151,26 @@ function compute_gas_injection!(ids::IMASDD.dd)
             end
         end
         if proceed
+            latency = deepcopy(global_latency)
+            if valve.name ∈ keys(valves)
+                valve_model = valves[valve.name]
+                if :latency ∈ keys(valve_model)
+                    latency = valve_model[:latency]
+                end
+            end
             valve.flow_rate.time = valve.voltage.time
+            valve.flow_rate.data = zeros(length(valve.voltage.time))
             valve_response = linear_interpolation(
                 valve.response_curve.voltage,
                 valve.response_curve.flow_rate,
             )
-            valve.flow_rate.data = valve_response.(valve.voltage.data)
+            tt0 = valve.voltage.time[1]
+            tt_over_lat = findall(x -> x > latency + tt0, valve.voltage.time)
+            if length(tt_over_lat) > 0
+                skip = tt_over_lat[1]
+                valve.flow_rate.data[skip:end] =
+                    valve_response.(valve.voltage.data[1:end-skip+1])
+            end
         end
     end
 end

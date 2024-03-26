@@ -156,36 +156,51 @@ function test_gas_response(config, excitation, plot_title, figname)
     ttotal = 5
     nt = Int(ttotal * 1000) + 1
     tstart = 1.0
-    tstartind = Int(tstart * 1000) + 1
     tend = 3.0
+    toffset = 0.5
+    tstartind = Int(tstart * 1000) + 1
     tendind = Int(tend * 1000) + 1
-    ids.gas_injection.valve[1].voltage.time = collect(LinRange(0, ttotal, nt))
+    tstartind2 = Int((tstart + toffset) * 1000) + 1
+    tendind2 = Int((tend + toffset) * 1000) + 1
+
+    tt = collect(LinRange(0, ttotal, nt))
+    ids.gas_injection.valve[1].voltage.time = tt
     ids.gas_injection.valve[1].voltage.data = zeros(nt)
     ids.gas_injection.valve[1].voltage.data[tstartind:tendind] .=
-        excitation.(ids.gas_injection.valve[1].voltage.time[tstartind:tendind])
+        excitation.(tt[tstartind:tendind])
 
-    compute_gas_injection!(ids)
+    ids.gas_injection.valve[2].voltage.time = tt
+    ids.gas_injection.valve[2].voltage.data = zeros(nt)
+    ids.gas_injection.valve[2].voltage.data[tstartind2:tendind2] .=
+        excitation.(tt[tstartind:tendind])
 
-    plot(
-        ids.gas_injection.valve[1].voltage.time,
-        ids.gas_injection.valve[1].voltage.data;
-        lw=2,
-        alpha=0.5,
-        label="Command Voltage / (Pa m^3/s)",
-    )
+    # Setting special latency for GASD, GASA will follow global latency
+    valves = Dict{String, Dict{Symbol, Any}}("GASD" => Dict(:latency => 0.183))
 
-    plot!(
-        ids.gas_injection.valve[1].flow_rate.time,
-        ids.gas_injection.valve[1].flow_rate.data;
-        lw=2,
-        label="Flow Rate / (Pa m^3/s)",
-    )
-    plot!(;
+    compute_gas_injection!(ids; valves=valves)
+
+    plot(;
         title=plot_title,
         legend=true,
         xlabel="Time (s)",
         ylabel="Flow rate or Command Voltage",
     )
+    for valve ∈ ids.gas_injection.valve
+        plot!(
+            valve.voltage.time,
+            valve.voltage.data;
+            lw=2,
+            alpha=0.5,
+            label="$(valve.name): Command Voltage / (Pa m^3/s)",
+        )
+
+        plot!(
+            valve.flow_rate.time,
+            valve.flow_rate.data;
+            lw=2,
+            label="$(valve.name): Flow Rate / (Pa m^3/s)",
+        )
+    end
     return savefig(figname)
 end
 
