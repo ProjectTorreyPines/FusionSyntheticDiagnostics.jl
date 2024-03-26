@@ -175,7 +175,9 @@ function test_gas_response(config, excitation, plot_title, figname)
         excitation.(tt[tstartind:tendind])
 
     # Setting special latency for GASD, GASA will follow global latency
-    valves = Dict{String, Dict{Symbol, Any}}("GASD" => Dict(:latency => 0.183))
+    valves = Dict{String, Dict{Symbol, Any}}(
+        "GASD" => Dict(:latency => 0.183, :time_constant => 0.3, :damping => 0.8),
+    )
 
     compute_gas_injection!(ids; valves=valves)
 

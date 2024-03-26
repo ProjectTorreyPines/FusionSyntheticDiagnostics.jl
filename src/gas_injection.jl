@@ -1,6 +1,6 @@
 import Interpolations: linear_interpolation
-# import DSP.Filters: Biquad, bilinear, convert, SecondOrderSections, DF2TFilter
-# import DSP: filt
+import DSP.Filters: Biquad, bilinear, convert, SecondOrderSections, DF2TFilter
+import DSP: filt
 
 default_gas_injection = "$(@__DIR__)/default_gas_injection.json"
 
@@ -152,14 +152,23 @@ function compute_gas_injection!(
         end
         if proceed
             latency = deepcopy(global_latency)
+            LPF = nothing
             if valve.name ∈ keys(valves)
                 valve_model = valves[valve.name]
                 if :latency ∈ keys(valve_model)
                     latency = valve_model[:latency]
                 end
+                if :time_constant ∈ keys(valve_model) && :damping ∈ keys(valve_model)
+                    LPF = get_lpf(
+                        1 / (valve.voltage.time[2] - valve.voltage.time[1]),
+                        valve_model[:time_constant],
+                        valve_model[:damping],
+                        1.0,
+                    )
+                end
             end
             valve.flow_rate.time = valve.voltage.time
-            valve.flow_rate.data = zeros(length(valve.voltage.time))
+            flow_rate = zeros(length(valve.voltage.time))
             valve_response = linear_interpolation(
                 valve.response_curve.voltage,
                 valve.response_curve.flow_rate,
@@ -168,9 +177,32 @@ function compute_gas_injection!(
             tt_over_lat = findall(x -> x > latency + tt0, valve.voltage.time)
             if length(tt_over_lat) > 0
                 skip = tt_over_lat[1]
-                valve.flow_rate.data[skip:end] =
-                    valve_response.(valve.voltage.data[1:end-skip+1])
+                flow_rate[skip:end] = valve_response.(valve.voltage.data[1:end-skip+1])
+                if !isnothing(LPF)
+                    flow_rate = filt(LPF, flow_rate)
+                end
+                flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
             end
+            valve.flow_rate.data = flow_rate
         end
     end
+end
+
+"""
+    get_lpf(fs::Float64, tau::Float64, damping::Float64, gain::Float64)
+
+Create a second order filter with the given parameters. The filter is created in the
+s-domain and then converted to the z-domain using bilinear transform.
+In s-domain, the filter transfer function is:
+
+    H(s) = gain * ωₙ^2 / (s^2 + 2 * damping * ωₙ * s + ωₙ^2)
+
+where ωₙ = 2π / tau
+"""
+function get_lpf(fs::Float64, tau::Float64, damping::Float64, gain::Float64)
+    ωₙ = 2π / tau
+    b = [0.0, 0.0, ωₙ^2] .* gain
+    a = [2 * damping * ωₙ, ωₙ^2]
+    filter_s = Biquad{:s}(b..., a...)
+    return convert(SecondOrderSections, bilinear(filter_s, fs))
 end
