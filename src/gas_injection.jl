@@ -1,6 +1,8 @@
 import Interpolations: linear_interpolation
 import DSP.Filters: Biquad, bilinear, convert, SecondOrderSections, DF2TFilter
-import DSP: filt
+import DSP: filt, xcorr
+import LsqFit: curve_fit, coef
+import Statistics: mean
 
 default_gas_injection = "$(@__DIR__)/default_gas_injection.json"
 
@@ -205,4 +207,189 @@ function get_lpf(fs::Float64, tau::Float64, damping::Float64, gain::Float64)
     a = [2 * damping * ωₙ, ωₙ^2]
     filter_s = Biquad{:s}(b..., a...)
     return convert(SecondOrderSections, bilinear(filter_s, fs))
+end
+
+"""
+    downsample_smooth(
+    tt::Vector{Float64},
+    data::Vector{Float64},
+    dt_res::Float64;
+    default_start=0.0,
+
+)::Vector{Float64}
+
+Downsample and smooth the data to a new time resolution. The time axis does not need to
+be equally spaced in time. The function creates a new time axis with spacing given by
+dt_res and then averages the data points that fall within the new time bin. If no data
+points fall within the new time bin, the function uses the last data point to fill the
+new time bin. default_start is used to fill first time bin if no data is present in the
+first time bin.
+"""
+function downsample_smooth(
+    tt::Vector{Float64},
+    data::Vector{Float64},
+    dt_res::Float64;
+    default_start=0.0,
+)::Vector{Float64}
+    tt_res = collect(tt[1]:dt_res:tt[end])
+    return downsample_smooth(tt, data, tt_res; default_start=default_start)
+end
+
+"""
+    downsample_smooth(
+    tt::Vector{Float64},
+    data::Vector{Float64},
+    tt_res::Vector{Float64};
+    default_start=0.0,
+
+)::Vector{Float64}
+
+Downsample and smooth the data to a new time resolution. The time axis does not need to
+be equally spaced in time. The function uses tt_res as the new resampled time axis and
+averages the data points that fall within the new time bin. If no data points fall
+within the new time bin, the function uses the last data point to fill the new time bin.
+default_start is used to fill first time bin if no data is present in the first time
+bin. Note that tt_res need not be equally spaced in time either.
+"""
+function downsample_smooth(
+    tt::Vector{Float64},
+    data::Vector{Float64},
+    tt_res::Vector{Float64};
+    default_start=0.0,
+)::Vector{Float64}
+    data_res = zeros(length(tt_res))
+    last_time = -Inf
+    for ii ∈ eachindex(data_res)
+        snap = data[(tt.>last_time).&(tt.<=tt_res[ii])]
+
+        if length(snap) == 0
+            if ii > 1
+                data_res[ii] = data_res[ii-1]
+            else
+                data_res[ii] = default_start
+            end
+        else
+            data_res[ii] = mean(snap)
+        end
+        last_time = tt_res[ii]
+    end
+    return data_res
+end
+
+"""
+    find_delay(
+    data1::Vector{Float64},
+    data2::Vector{Float64},
+    dt::Float64,
+
+)::Float64
+
+Find the delay between two signals using cross-correlation. The function returns the
+delay in seconds. The function assumes that data1 is the reference signal and data2 is
+the signal that is delayed with respect to data1. The funciton assumes that data1 and
+data2 are sampled at the same rate and are of same length. dt is the time resolution of
+the data.
+"""
+function find_delay(
+    data1::Vector{Float64},
+    data2::Vector{Float64},
+    dt::Float64,
+)::Float64
+    corr = xcorr(data1, data2)
+    return (argmax(abs.(corr)) - length(data1) + 1) * dt
+end
+
+"""
+    gi_model(x::Vector{Float64}, p::Vector{Float64})::Vector{Float64}
+
+Non linear gas injection model. The model is given by:
+
+    y = p₁ * (√(x²p₂² + 1) - 1)
+
+where x is the input voltage in Volts and y is the flow rate in Pa m³/ s
+"""
+function gi_model(x::Vector{Float64}, p::Vector{Float64})::Vector{Float64}
+    return p[1] .* (sqrt.((x .* p[2]) .^ 2 .+ 1) .- 1)  # Pa m³/ s
+end
+
+"""
+    int_gi_model(x::Vector{Float64}, p::Vector{Float64})::Vector{Float64}
+
+Cumulative sum of gas injection model. This function models the accumulated gas in the
+vessel volume. Note that this is a numerical cumulative sum and does not change the
+units of output. Returned output is in Pa m³/ s.
+"""
+function int_gi_model(x::Vector{Float64}, p::Vector{Float64})::Vector{Float64}
+    ret_val = zeros(length(x))
+    for ii ∈ eachindex(x)
+        ret_val[ii] = sum(gi_model(x[1:ii], p))
+    end
+    return ret_val # Pa m³/ s
+end
+
+"""
+    get_gas_injection_response(
+    cmd::Vector{Float64},
+    cmd_tt::Vector{Float64},
+    P_ves::Vector{Float64},
+    P_ves_tt::Vector{Float64},
+    V_ves::Float64;
+    resample_dt::Float64=0.02,
+    gi_fit_guess::Vector{Float64}=[1.0, 1.0],
+    response_curve_voltage::Vector{Float64}=collect(0:0.001:11),
+
+)::Tuple{IMASDD.gas_injection__valve___response_curve, Dict{Symbol, Any}}
+
+Function to fit a gas calibration shot data to a gas injection model. It requires 2 set
+of data, cmd, and cmd_tt are the command sent in Volts and the corresponding time axis.
+P_ves and P_ves_tt are the pressure in the vessel and the corresponding time axis. V_ves
+is the volume of the vessel. The function returns a response_curve object and a valve
+model dictionary that can be used in compute_gas_injection function.
+Optional keyword arguments:
+resample_dt: Time resolution to resample the data.
+gi_fit_guess: Initial guess for the gas injection model parameters.
+response_curve_voltage: Voltage axis for storing the response curve.
+"""
+function get_gas_injection_response(
+    cmd::Vector{Float64},
+    cmd_tt::Vector{Float64},
+    P_ves::Vector{Float64},
+    P_ves_tt::Vector{Float64},
+    V_ves::Float64;
+    resample_dt::Float64=0.02,
+    gi_fit_guess::Vector{Float64}=[1.0, 1.0],
+    response_curve_voltage::Vector{Float64}=collect(0:0.001:11),
+)::Tuple{IMASDD.gas_injection__valve___response_curve, Dict{Symbol, Any}}
+    tt =
+        collect(min(cmd_tt[1], P_ves_tt[1]):resample_dt:max(cmd_tt[end], P_ves_tt[end]))
+    cmd = downsample_smooth(cmd_tt, cmd, tt)
+    P_ves = downsample_smooth(P_ves_tt, P_ves, tt)
+
+    # Find latency between cmd and P_ves (derivative of P is easier to use for latency)
+    dif_P_ves = [0; diff(P_ves)] / resample_dt # Pa / s
+    latency = find_delay(dif_P_ves, cmd, resample_dt)
+    latency_len = round(Int, latency / resample_dt)
+
+    # Shift cmd forward by latency to match P_ves
+    cmd = [zeros(latency_len); cmd[1:end-latency_len]]
+
+    # Accumulated gas in vessel
+    acc_gas = V_ves * P_ves  # m^3 * Pa
+
+    # Fit the gas injection model to the data
+    fit = curve_fit(
+        int_gi_model,
+        cmd[acc_gas.>0],
+        acc_gas[acc_gas.>0] / resample_dt,
+        gi_fit_guess,
+    )
+
+    # Calculate the response curve
+    response_curve = IMASDD.gas_injection__valve___response_curve()
+    response_curve.voltage = response_curve_voltage
+    response_curve.flow_rate = gi_model(response_curve_voltage, coef(fit))
+
+    valve_model = Dict{Symbol, Any}(:latency => latency)
+
+    return response_curve, valve_model
 end
