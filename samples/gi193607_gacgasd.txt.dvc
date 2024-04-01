@@ -1,0 +1,12 @@
+md5: 02d505916dfbb2b4094e0e72894d4666
+frozen: true
+deps:
+- path: misc_data_files/gi193607_gacgasd.txt
+  repo:
+    url: git@github.com:ProjectTorreyPines/SOLPSTestSamples.git
+    rev_lock: 1b6c7049dab9eb884c0c7615599eefe613c5e703
+outs:
+- md5: 01ea8ecc26fc22bf80502271d0cd74b2
+  size: 1501998
+  hash: md5
+  path: gi193607_gacgasd.txt
