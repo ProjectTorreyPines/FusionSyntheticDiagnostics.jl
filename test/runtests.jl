@@ -191,8 +191,9 @@ function test_gas_response(config, excitation, plot_title, figname; fit=false)
             get_gas_injection_response(cmd, cmd_tt, P_ves, P_ves_tt, V_ves)
         ids.gas_injection.valve[1].response_curve = gasd_resp_curve
         # Adding made up time_constant and damping
-        gasd_model[:time_constant] = 0.3
-        gasd_model[:damping] = 0.8
+        gasd_model[:time_constant] = 0.05
+        gasd_model[:damping] = 0.5
+        gasd_model[:dribble_decay_time_constant] = 0.45
 
         valves = Dict("GASD" => gasd_model)
 
@@ -227,7 +228,8 @@ function test_gas_response(config, excitation, plot_title, figname; fit=false)
         # Setting special latency for GASD, GASA will follow global latency
         valves = Dict{String, Dict{Symbol, Any}}(
             "GASD" =>
-                Dict(:latency => 0.183, :time_constant => 0.3, :damping => 0.8),
+                Dict(:latency => 0.183, :time_constant => 0.05, :damping => 0.5,
+                    :dribble_decay_time_constant => 0.45),
         )
     end
 
