@@ -8,6 +8,7 @@ import GGDUtils:
     interp, get_grid_subset, get_subset_boundary, subset_do, get_TPS_mats
 default_ifo = "$(@__DIR__)/default_interferometer.json"
 default_gi = "$(@__DIR__)/default_gas_injection.json"
+default_lp = "$(@__DIR__)/default_langmuir_probes.json"
 
 include("$(@__DIR__)/noise.jl")
 
