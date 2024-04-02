@@ -1,6 +1,6 @@
 using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
     compute_gas_injection, get_gas_injection_response, Noise, OverwriteAttemptError
-using OMAS: json2imas
+using IMASDD: json2imas
 using Test
 using Printf
 using Plots

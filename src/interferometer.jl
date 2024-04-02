@@ -199,13 +199,13 @@ function compute_interferometer(
                 )
             end
 
-            resize!(ch.n_e_line.time, nt)
-            resize!(ch.n_e_line_average.time, nt)
-            resize!(ch.n_e_line.data, nt)
-            resize!(ch.n_e_line_average.data, nt)
+            ch.n_e_line.time = zeros(nt)
+            ch.n_e_line_average.time = zeros(nt)
+            ch.n_e_line.data = zeros(nt)
+            ch.n_e_line_average.data = zeros(nt)
             for lam ∈ ch.wavelength
-                resize!(lam.phase_corrected.time, nt)
-                resize!(lam.phase_corrected.data, nt)
+                lam.phase_corrected.time = zeros(nt)
+                lam.phase_corrected.data = zeros(nt)
             end
 
             # Parametrize line of sight
