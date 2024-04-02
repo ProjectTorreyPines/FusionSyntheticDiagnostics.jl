@@ -1,7 +1,5 @@
 import GGDUtils: interp, get_types_with
 
-default_lp = "$(@__DIR__)/default_langmuir_probe.json"
-
 """
     add_langmuir_probes!(
     config::String=default_lp,
