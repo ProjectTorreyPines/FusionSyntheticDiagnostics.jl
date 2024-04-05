@@ -155,6 +155,7 @@ function compute_gas_injection(
         if proceed
             latency = deepcopy(global_latency)
             LPF = nothing
+            dribble_tau = nothing
             if valve.name ∈ keys(valves)
                 valve_model = valves[valve.name]
                 if :latency ∈ keys(valve_model)
@@ -168,6 +169,9 @@ function compute_gas_injection(
                         1.0,
                     )
                 end
+                if :dribble_decay_time_constant ∈ keys(valve_model)
+                    dribble_tau = valve_model[:dribble_decay_time_constant]
+                end
             end
             valve.flow_rate.time = valve.voltage.time
             flow_rate = zeros(length(valve.voltage.time))
@@ -180,6 +184,13 @@ function compute_gas_injection(
             if length(tt_over_lat) > 0
                 skip = tt_over_lat[1]
                 flow_rate[skip:end] = valve_response.(valve.voltage.data[1:end-skip+1])
+                if !isnothing(dribble_tau)
+                    flow_rate = dribble(
+                        flow_rate,
+                        dribble_tau,
+                        1 / (valve.voltage.time[2] - valve.voltage.time[1]),
+                    )
+                end
                 if !isnothing(LPF)
                     flow_rate = filt(LPF, flow_rate)
                 end
@@ -207,6 +218,36 @@ function get_lpf(fs::Float64, tau::Float64, damping::Float64, gain::Float64)
     a = [2 * damping * ωₙ, ωₙ^2]
     filter_s = Biquad{:s}(b..., a...)
     return convert(SecondOrderSections, bilinear(filter_s, fs))
+end
+
+"""
+    dribble(
+    data::Vector{Float64},
+    decay_time_constant::Float64,
+    fs::Float64,
+
+)::Vector{Float64}
+
+Function to modle dribble effect when gas command falls too sharply due to remaining
+gas in the pipe.
+"""
+function dribble(
+    data::Vector{Float64},
+    decay_time_constant::Float64,
+    fs::Float64,
+)::Vector{Float64}
+    data_der = [diff(data); 0.0]
+    ii = 1
+    while ii < length(data_der) - 2
+        if data_der[ii] <
+           -exp(-1.0 / (decay_time_constant * fs)) / (decay_time_constant * fs)
+            data[ii+1] = data[ii] * exp(-1.0 / (decay_time_constant * fs))
+            data_der[ii] = data[ii+1] - data[ii]
+            data_der[ii+1] = data[ii+2] - data[ii+1]
+        end
+        ii += 1
+    end
+    return data
 end
 
 """
