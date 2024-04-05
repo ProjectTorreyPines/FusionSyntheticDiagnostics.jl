@@ -132,21 +132,22 @@ if args["langmuir_probes"]
         # Just checking if the function runs through for now
         for lp ∈ ids.langmuir_probes.embedded
             println()
-            println("-"^49)
-            println("-"^49)
+            println("-"^65)
+            println("-"^65)
             println("Probe: $(lp.name)")
-            println("-"^49)
-            @printf("|%15s|%15s|%15s|\n", "time", "n_e", "t_e")
-            println("-"^49)
-            for ii ∈ eachindex(lp.time)
+            println("-"^65)
+            @printf("|%15s|%15s|%15s|%15s|\n", "time", "n_e", "t_e", "t_i")
+            println("-"^65)
+            for ii ∈ 1:20:length(lp.time)
                 @printf(
-                    "|%15.3e|%15.3e|%15.3e|\n",
+                    "|%15.3e|%15.3e|%15.3e|%15.3e|\n",
                     lp.time[ii],
                     lp.n_e.data[ii],
-                    lp.t_e.data[ii]
+                    lp.t_e.data[ii],
+                    lp.t_i.data[ii],
                 )
             end
-            println("-"^49)
+            println("-"^65)
         end
         @test true
     end
