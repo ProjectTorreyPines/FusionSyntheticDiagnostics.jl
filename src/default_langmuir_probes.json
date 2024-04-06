@@ -2,12 +2,42 @@
     "langmuir_probes": {
         "embedded": [
             {
-                "name": "LP1",
+                "name": "LP at strike point",
                 "identifier": "LP1",
                 "position": {
                     "phi": 0.0,
-                    "r": 5.5,
-                    "z": -5.0
+                    "r": 5.554288,
+                    "z": -4.39279
+                },
+                "surface_area": 1.6e-5
+            },
+            {
+                "name": "LP2",
+                "identifier": "LP2",
+                "position": {
+                    "phi": 0.0,
+                    "r": 5.554259,
+                    "z": -4.195114
+                },
+                "surface_area": 1.6e-5
+            },
+            {
+                "name": "LP3",
+                "identifier": "LP3",
+                "position": {
+                    "phi": 0.0,
+                    "r": 5.554249,
+                    "z": -4.145017
+                },
+                "surface_area": 1.6e-5
+            },
+            {
+                "name": "LP4",
+                "identifier": "LP4",
+                "position": {
+                    "phi": 0.0,
+                    "r": 5.5600221,
+                    "z": -4.031825
                 },
                 "surface_area": 1.6e-5
             }
