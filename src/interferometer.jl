@@ -1,35 +1,3 @@
-
-struct OverwriteAttemptError <: Exception
-    var::String
-end
-
-Base.showerror(io::IO, e::OverwriteAttemptError) = print(io, e.var)
-
-function convert_strings_to_symbols(d::Dict{String, Any})
-    new_d = Dict{Symbol, Any}()
-    for (k, v) ∈ d
-        if isa(v, Dict{String, Any})
-            new_d[Symbol(k)] = convert_strings_to_symbols(v)
-        elseif isa(v, Vector{Any})
-            if length(v) > 0
-                if isa(v[1], Dict{String, Any})
-                    new_d[Symbol(k)] = Vector{Dict{Symbol, Any}}(undef, length(v))
-                    for ii ∈ eachindex(v)
-                        new_d[Symbol(k)][ii] = convert_strings_to_symbols(v[ii])
-                    end
-                else
-                    new_d[Symbol(k)] = v
-                end
-            else
-                new_d[Symbol(k)] = v
-            end
-        else
-            new_d[Symbol(k)] = v
-        end
-    end
-    return new_d
-end
-
 """
     add_interferometer(
     @nospecialize(ids::IMASDD.dd)=IMASDD.dd(),
@@ -52,6 +20,7 @@ function add_interferometer!(
             ids;
             overwrite=overwrite,
             verbose=verbose,
+            rtol=rtol,
             n_e_gsi=n_e_gsi,
         )
     else
