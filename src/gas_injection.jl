@@ -238,12 +238,14 @@ function dribble(
 )::Vector{Float64}
     data_der = [diff(data); 0.0]
     ii = 1
-    while ii < length(data_der) - 2
+    while ii < length(data_der) - 1
         if data_der[ii] <
            -exp(-1.0 / (decay_time_constant * fs)) / (decay_time_constant * fs)
             data[ii+1] = data[ii] * exp(-1.0 / (decay_time_constant * fs))
             data_der[ii] = data[ii+1] - data[ii]
-            data_der[ii+1] = data[ii+2] - data[ii+1]
+            if ii < length(data_der) - 2
+                data_der[ii+1] = data[ii+2] - data[ii+1]
+            end
         end
         ii += 1
     end
@@ -433,4 +435,20 @@ function get_gas_injection_response(
     valve_model = Dict{Symbol, Any}(:latency => latency)
 
     return response_curve, valve_model
+end
+
+function get_required_gas_cmd(
+    required_flow_rate::Float64,
+    response_curve::IMASDD.gas_injection__valve___response_curve,
+)::Float64
+    gas_cmd = linear_interpolation(response_curve.flow_rate, response_curve.voltage)
+    return gas_cmd(required_flow_rate)
+end
+
+function get_required_gas_cmd(
+    required_flow_rate::Vector{Float64},
+    response_curve::IMASDD.gas_injection__valve___response_curve,
+)::Vector{Float64}
+    gas_cmd = linear_interpolation(response_curve.flow_rate, response_curve.voltage)
+    return gas_cmd.(required_flow_rate)
 end
