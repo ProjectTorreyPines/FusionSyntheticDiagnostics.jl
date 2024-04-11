@@ -183,7 +183,7 @@ function compute_gas_injection(
             tt_over_lat = findall(x -> x > latency + tt0, valve.voltage.time)
             if length(tt_over_lat) > 0
                 skip = tt_over_lat[1]
-                flow_rate[skip:end] = valve_response.(valve.voltage.data[1:end-skip+1])
+                flow_rate = valve_response.(valve.voltage.data)
                 if !isnothing(dribble_tau)
                     flow_rate = dribble(
                         flow_rate,
@@ -195,6 +195,8 @@ function compute_gas_injection(
                     flow_rate = filt(LPF, flow_rate)
                 end
                 flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
+                flow_rate[1:skip-1] .= 0.0
+                flow_rate[skip:end] = flow_rate[1:end-skip+1]
             end
             valve.flow_rate.data = flow_rate
         end
