@@ -1,5 +1,6 @@
 using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
-    compute_gas_injection, get_gas_injection_response, Noise, OverwriteAttemptError
+    compute_gas_injection, get_gas_injection_response, Noise, OverwriteAttemptError,
+    langmuir_probe_current
 using IMASDD: json2imas
 using Test
 using Printf
@@ -132,22 +133,53 @@ if args["langmuir_probes"]
         # Just checking if the function runs through for now
         for lp ∈ ids.langmuir_probes.embedded
             println()
-            println("-"^49)
-            println("-"^49)
+            println("-"^97)
+            println("-"^97)
             println("Probe: $(lp.name)")
-            println("-"^49)
-            @printf("|%15s|%15s|%15s|\n", "time", "n_e", "t_e")
-            println("-"^49)
-            for ii ∈ eachindex(lp.time)
+            println("-"^97)
+            @printf("|%15s|%15s|%15s|%15s|%15s|%15s|\n", "time", "n_e", "t_e", "t_i",
+                "i_sat", "j_sat")
+            println("-"^97)
+            for ii ∈ 1:20:length(lp.time)
                 @printf(
-                    "|%15.3e|%15.3e|%15.3e|\n",
+                    "|%15.3e|%15.3e|%15.3e|%15.3e|%15.3e|%15.3e|\n",
                     lp.time[ii],
                     lp.n_e.data[ii],
-                    lp.t_e.data[ii]
+                    lp.t_e.data[ii],
+                    lp.t_i.data[ii],
+                    lp.ion_saturation_current.data[ii],
+                    lp.j_i_parallel.data[ii],
                 )
             end
-            println("-"^49)
+            println("-"^97)
         end
+        @test true
+        # Create an I-V curve and plot it
+        v_probe = collect(-100:0.1:100)
+        v_plasma_1 = 20.0
+        v_plasma_2 = 0.0
+        v_plasma_3 = -20.0
+        Δv_1 = v_probe .- v_plasma_1
+        Δv_2 = v_probe .- v_plasma_2
+        Δv_3 = v_probe .- v_plasma_3
+        Te = 10.0 # eV
+        Ti = 9.0 # eV
+        ne = 1e21 # m^-3
+        A = 1e-6 # m^2 1 sq mm
+        i_probe_1 = langmuir_probe_current.(Δv_1, Te, Ti, ne, A)
+        i_probe_2 = langmuir_probe_current.(Δv_2, Te, Ti, ne, A)
+        i_probe_3 = langmuir_probe_current.(Δv_3, Te, Ti, ne, A)
+        plot(v_probe, i_probe_1; label="v_plasma = 20.0 V")
+        plot!(v_probe, i_probe_2; label="v_plasma = 0.0 V")
+        plot!(v_probe, i_probe_3; label="v_plasma = -20.0 V")
+        plot!(; legend=true,
+            xlabel="Probe Voltage (V)",
+            ylabel="Probe Current (A)",
+            title="Langmuir Probe I-V Curve",
+        )
+        details = text("Te = $Te eV\nTi = $Ti eV\nne = $ne m^-3\nA = $A m^2", :left)
+        annotate!(-100, 300, details)
+        savefig("$(@__DIR__)/langmuir_probe_iv.png")
         @test true
     end
 end

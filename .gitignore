@@ -4,3 +4,4 @@
 # environment.
 Manifest.toml
 test/*.png
+examples/*.toml
