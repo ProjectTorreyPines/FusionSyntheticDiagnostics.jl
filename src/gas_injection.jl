@@ -113,7 +113,9 @@ function compute_gas_injection(
         global_latency = ids.gas_injection.latency
     end
 
-    for valve ∈ ids.gas_injection.valve
+    future_flow_rates = Array{Vector{Float64}}(undef, length(ids.gas_injection.valve))
+    for (vind, valve) ∈ enumerate(ids.gas_injection.valve)
+        future_flow_rates[vind] = Float64[]
         proceed =
             !IMASDD.ismissing(valve.response_curve, :flow_rate) &&
             !IMASDD.ismissing(valve.response_curve, :voltage) &&
@@ -180,7 +182,7 @@ function compute_gas_injection(
                 valve.response_curve.flow_rate,
             )
             tt0 = valve.voltage.time[1]
-            tt_over_lat = findall(x -> x > latency + tt0, valve.voltage.time)
+            tt_over_lat = findall(x -> x >= latency + tt0, valve.voltage.time)
             if length(tt_over_lat) > 0
                 skip = tt_over_lat[1]
                 flow_rate = valve_response.(valve.voltage.data)
@@ -195,12 +197,14 @@ function compute_gas_injection(
                     flow_rate = filt(LPF, flow_rate)
                 end
                 flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
+                future_flow_rates[vind] = flow_rate[end-skip+2:end]
                 flow_rate[1:skip-1] .= 0.0
                 flow_rate[skip:end] = flow_rate[1:end-skip+1]
             end
             valve.flow_rate.data = flow_rate
         end
     end
+    return future_flow_rates
 end
 
 """
