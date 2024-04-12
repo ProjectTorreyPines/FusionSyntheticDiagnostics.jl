@@ -97,14 +97,18 @@ function add_gas_injection!(
 end
 
 """
-    compute_gas_injection(ids::IMASDD.dd)
+    compute_gas_injection!(
+    ids::IMASDD.dd;
+    valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
 
-Compute the gas flow rate based on the command signal in the gas valves.
+)::Array{Vector{Float64}}
+
+Compute the gas flow rate based on the command signal in the all gas valves.
 """
 function compute_gas_injection!(
     ids::IMASDD.dd;
     valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
-)
+)::Array{Vector{Float64}}
     if IMASDD.ismissing(ids.gas_injection, :latency)
         global_latency = 0.0
     elseif IMASDD.isempty(ids.gas_injection.latency)
@@ -170,11 +174,28 @@ function compute_gas_injection!(
     return future_flow_rates
 end
 
-function compute_gas_injection(
-    valve::IMASDD.gas_injection__valve;
+"""
+    compute_gas_injection(
+    tt::Vector{Float64},
+    cmd_voltage::Vector{Float64},
+    response_curve_voltage::Vector{Float64},
+    response_curve_flow_rate::Vector{Float64};
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
-)
+
+)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+
+Lowest level function to compute gas flow rate based on the command voltage data and
+response cruve data all provided in base Julia types.
+"""
+function compute_gas_injection(
+    tt::Vector{Float64},
+    cmd_voltage::Vector{Float64},
+    response_curve_voltage::Vector{Float64},
+    response_curve_flow_rate::Vector{Float64};
+    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+    global_latency::Float64=0.0,
+)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
     latency = deepcopy(global_latency)
     LPF = nothing
     dribble_tau = nothing
@@ -183,7 +204,7 @@ function compute_gas_injection(
     end
     if :time_constant ∈ keys(valve_model) && :damping ∈ keys(valve_model)
         LPF = get_lpf(
-            1 / (valve.voltage.time[2] - valve.voltage.time[1]),
+            1 / (tt[2] - tt[1]),
             valve_model[:time_constant],
             valve_model[:damping],
             1.0,
@@ -192,16 +213,15 @@ function compute_gas_injection(
     if :dribble_decay_time_constant ∈ keys(valve_model)
         dribble_tau = valve_model[:dribble_decay_time_constant]
     end
-    tt = valve.voltage.time
     flow_rate = zeros(length(tt))
     valve_response = linear_interpolation(
-        valve.response_curve.voltage,
-        valve.response_curve.flow_rate,
+        response_curve_voltage,
+        response_curve_flow_rate,
     )
     tt_over_lat = findall(x -> x >= latency + tt[1], tt)
     if length(tt_over_lat) > 0
         skip = tt_over_lat[1]
-        flow_rate = valve_response.(valve.voltage.data)
+        flow_rate = valve_response.(cmd_voltage)
         if !isnothing(dribble_tau)
             flow_rate = dribble(
                 flow_rate,
@@ -220,11 +240,75 @@ function compute_gas_injection(
     return tt, flow_rate, future_flow_rates
 end
 
+"""
+    compute_gas_injection(
+    tt::Vector{Float64},
+    cmd_voltage::Vector{Float64},
+    response_curve::IMASDD.gas_injection__valve___response_curve;
+    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+    global_latency::Float64=0.0,
+
+)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+
+Convinience function format where response curve is provided as the ids type but
+everything else is provided in base Julia types.
+"""
+function compute_gas_injection(
+    tt::Vector{Float64},
+    cmd_voltage::Vector{Float64},
+    response_curve::IMASDD.gas_injection__valve___response_curve;
+    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+    global_latency::Float64=0.0,
+)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+    return compute_gas_injection(
+        tt,
+        cmd_voltage,
+        response_curve.voltage,
+        response_curve.flow_rate;
+        valve_model=valve_model,
+        global_latency=global_latency,
+    )
+end
+
+"""
+    compute_gas_injection(
+    valve::IMASDD.gas_injection__valve;
+    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+    global_latency::Float64=0.0,
+
+)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+
+Top most level function to compute gas flow rate for a single valve.
+"""
+function compute_gas_injection(
+    valve::IMASDD.gas_injection__valve;
+    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+    global_latency::Float64=0.0,
+)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+    return compute_gas_injection(
+        valve.voltage.time,
+        valve.voltage.data,
+        valve.response_curve;
+        valve_model=valve_model,
+        global_latency=global_latency,
+    )
+end
+
+"""
+    compute_gas_injection!(
+    valve::IMASDD.gas_injection__valve;
+    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+    global_latency::Float64=0.0,
+
+)::Vector{Float64}
+
+In-place version of compute_gas_injection function for a single valve.
+"""
 function compute_gas_injection!(
     valve::IMASDD.gas_injection__valve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
-)
+)::Vector{Float64}
     tt, flow_rate, future_flow_rates = compute_gas_injection(
         valve;
         valve_model=valve_model,
