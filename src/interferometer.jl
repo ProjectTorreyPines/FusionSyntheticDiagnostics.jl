@@ -87,7 +87,7 @@ function add_interferometer!(
             )
     end
     IMASDD.dict2imas(config, ids; verbose=verbose)
-    compute_interferometer(ids; rtol=rtol, n_e_gsi=n_e_gsi)
+    compute_interferometer!(ids; rtol=rtol, n_e_gsi=n_e_gsi)
     return ids
 end
 
@@ -97,7 +97,7 @@ end
   - Calculate phase_to_n_e_line if not present for each wavelength
   - Compute the line integrated electron density if not present
 """
-function compute_interferometer(
+function compute_interferometer!(
     @nospecialize(ids::IMASDD.dd);
     rtol::Float64=1e-3,
     n_e_gsi::Int=5,

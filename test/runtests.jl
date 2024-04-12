@@ -1,5 +1,5 @@
 using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
-    compute_gas_injection, get_gas_injection_response, Noise, OverwriteAttemptError,
+    compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current
 using IMASDD: json2imas
 using Test
@@ -265,7 +265,7 @@ function test_gas_response(config, excitation, plot_title, figname; fit=false)
         )
     end
 
-    compute_gas_injection(ids; valves=valves)
+    compute_gas_injection!(ids; valves=valves)
 
     plot(;
         title=plot_title,

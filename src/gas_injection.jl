@@ -92,7 +92,7 @@ function add_gas_injection!(
     valves = Dict{String, Dict{Symbol, Any}}(
         valve[:name] => valve for valve ∈ config[:gas_injection][:valve]
     )
-    compute_gas_injection(ids; valves=valves)
+    compute_gas_injection!(ids; valves=valves)
     return ids
 end
 
@@ -101,7 +101,7 @@ end
 
 Compute the gas flow rate based on the command signal in the gas valves.
 """
-function compute_gas_injection(
+function compute_gas_injection!(
     ids::IMASDD.dd;
     valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
 )
@@ -165,53 +165,6 @@ function compute_gas_injection(
                 valve_model=valve_model,
                 global_latency=global_latency,
             )
-            # latency = deepcopy(global_latency)
-            # LPF = nothing
-            # dribble_tau = nothing
-            # if valve.name ∈ keys(valves)
-            #     valve_model = valves[valve.name]
-            #     if :latency ∈ keys(valve_model)
-            #         latency = valve_model[:latency]
-            #     end
-            #     if :time_constant ∈ keys(valve_model) && :damping ∈ keys(valve_model)
-            #         LPF = get_lpf(
-            #             1 / (valve.voltage.time[2] - valve.voltage.time[1]),
-            #             valve_model[:time_constant],
-            #             valve_model[:damping],
-            #             1.0,
-            #         )
-            #     end
-            #     if :dribble_decay_time_constant ∈ keys(valve_model)
-            #         dribble_tau = valve_model[:dribble_decay_time_constant]
-            #     end
-            # end
-            # valve.flow_rate.time = valve.voltage.time
-            # flow_rate = zeros(length(valve.voltage.time))
-            # valve_response = linear_interpolation(
-            #     valve.response_curve.voltage,
-            #     valve.response_curve.flow_rate,
-            # )
-            # tt0 = valve.voltage.time[1]
-            # tt_over_lat = findall(x -> x >= latency + tt0, valve.voltage.time)
-            # if length(tt_over_lat) > 0
-            #     skip = tt_over_lat[1]
-            #     flow_rate = valve_response.(valve.voltage.data)
-            #     if !isnothing(dribble_tau)
-            #         flow_rate = dribble(
-            #             flow_rate,
-            #             dribble_tau,
-            #             1 / (valve.voltage.time[2] - valve.voltage.time[1]),
-            #         )
-            #     end
-            #     if !isnothing(LPF)
-            #         flow_rate = filt(LPF, flow_rate)
-            #     end
-            #     flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
-            #     future_flow_rates[vind] = flow_rate[end-skip+2:end]
-            #     flow_rate[1:skip-1] .= 0.0
-            #     flow_rate[skip:end] = flow_rate[1:end-skip+1]
-            # end
-            # valve.flow_rate.data = flow_rate
         end
     end
     return future_flow_rates
