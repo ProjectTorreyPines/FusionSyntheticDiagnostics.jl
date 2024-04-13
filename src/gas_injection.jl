@@ -1,4 +1,4 @@
-import Interpolations: linear_interpolation
+import Interpolations: linear_interpolation, Flat
 import DSP.Filters: Biquad, bilinear, convert, SecondOrderSections, DF2TFilter
 import DSP: filt, xcorr
 import LsqFit: curve_fit, coef
@@ -216,7 +216,8 @@ function compute_gas_injection(
     flow_rate = zeros(length(tt))
     valve_response = linear_interpolation(
         response_curve_voltage,
-        response_curve_flow_rate,
+        response_curve_flow_rate;
+        extrapolation_bc=Flat(),
     )
     tt_over_lat = findall(x -> x >= latency + tt[1], tt)
     if length(tt_over_lat) > 0
