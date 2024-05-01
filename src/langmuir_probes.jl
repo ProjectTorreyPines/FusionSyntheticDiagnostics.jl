@@ -28,7 +28,6 @@ function add_langmuir_probes!(
     else
         error("Only JSON files are supported.")
     end
-    compute_langmuir_probes(ids; kwargs...)
     return ids
 end
 
@@ -120,11 +119,11 @@ function add_langmuir_probes!(
             )
     end
     IMASDD.dict2imas(config, ids; verbose=verbose)
-    compute_langmuir_probes(ids; kwargs...)
+    compute_langmuir_probes!(ids; kwargs...)
     return ids
 end
 
-function compute_langmuir_probes(
+function compute_langmuir_probes!(
     ids::IMASDD.dd;
     v_plasma::Union{Float64, Vector{Float64}, Nothing}=nothing,
     v_floating::Union{Float64, Vector{Float64}, Nothing}=nothing,
