@@ -4,16 +4,18 @@ import DSP: filt, xcorr
 import LsqFit: curve_fit, coef
 import Statistics: mean
 
+export add_gas_injection!, compute_gas_injection!, compute_gas_injection,
+    get_gas_injection_response, get_required_gas_cmd
+
 default_gas_injection = "$(@__DIR__)/default_gas_injection.json"
 
 """
     add_gas_injection!(
-    config::String=default_gas_injection,
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite::Bool=false,
-    verbose::Bool=false,
-
-)::IMASDD.dd
+        config::String=default_gas_injection,
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite::Bool=false,
+        verbose::Bool=false,
+    )::IMASDD.dd
 
 Add gas valves from a JSON file and compute the gas flow rate based on the command
 signal in the gas valves.
@@ -35,12 +37,11 @@ end
 
 """
     add_gas_injection!(
-    config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite::Bool=false,
-    verbose::Bool=false,
-
-)::IMASDD.dd
+        config::Dict{Symbol, Any},
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite::Bool=false,
+        verbose::Bool=false,
+    )::IMASDD.dd
 
 Add gas valves from a dictionary and compute the gas flow rate based on the command
 signal in the gas valves.
@@ -98,10 +99,9 @@ end
 
 """
     compute_gas_injection!(
-    ids::IMASDD.dd;
-    valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
-
-)::Array{Vector{Float64}}
+        ids::IMASDD.dd;
+        valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
+    )::Array{Vector{Float64}}
 
 Compute the gas flow rate based on the command signal in the all gas valves.
 """
@@ -176,14 +176,13 @@ end
 
 """
     compute_gas_injection(
-    tt::Vector{Float64},
-    cmd_voltage::Vector{Float64},
-    response_curve_voltage::Vector{Float64},
-    response_curve_flow_rate::Vector{Float64};
-    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
-    global_latency::Float64=0.0,
-
-)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+        tt::Vector{Float64},
+        cmd_voltage::Vector{Float64},
+        response_curve_voltage::Vector{Float64},
+        response_curve_flow_rate::Vector{Float64};
+        valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+        global_latency::Float64=0.0,
+    )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
 
 Lowest level function to compute gas flow rate based on the command voltage data and
 response cruve data all provided in base Julia types.
@@ -243,13 +242,12 @@ end
 
 """
     compute_gas_injection(
-    tt::Vector{Float64},
-    cmd_voltage::Vector{Float64},
-    response_curve::IMASDD.gas_injection__valve___response_curve;
-    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
-    global_latency::Float64=0.0,
-
-)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+        tt::Vector{Float64},
+        cmd_voltage::Vector{Float64},
+        response_curve::IMASDD.gas_injection__valve___response_curve;
+        valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+        global_latency::Float64=0.0,
+    )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
 
 Convinience function format where response curve is provided as the ids type but
 everything else is provided in base Julia types.
@@ -273,11 +271,10 @@ end
 
 """
     compute_gas_injection(
-    valve::IMASDD.gas_injection__valve;
-    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
-    global_latency::Float64=0.0,
-
-)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+        valve::IMASDD.gas_injection__valve;
+        valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+        global_latency::Float64=0.0,
+    )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
 
 Top most level function to compute gas flow rate for a single valve.
 """
@@ -297,13 +294,12 @@ end
 
 """
     compute_gas_injection!(
-    valve::IMASDD.gas_injection__valve;
-    valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
-    global_latency::Float64=0.0,
+        valve::IMASDD.gas_injection__valve;
+        valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
+        global_latency::Float64=0.0,
+    )::Vector{Float64}
 
-)::Vector{Float64}
-
-In-place version of compute_gas_injection function for a single valve.
+In-place version of [`compute_gas_injection`](@ref) function for a single valve.
 """
 function compute_gas_injection!(
     valve::IMASDD.gas_injection__valve;
@@ -321,17 +317,27 @@ function compute_gas_injection!(
 end
 
 """
-    get_lpf(fs::Float64, tau::Float64, damping::Float64, gain::Float64)
+    get_lpf(
+        fs::Float64,
+        tau::Float64,
+        damping::Float64,
+        gain::Float64,
+    )::SecondOrderSections
 
 Create a second order filter with the given parameters. The filter is created in the
 s-domain and then converted to the z-domain using bilinear transform.
 In s-domain, the filter transfer function is:
 
-    H(s) = gain * ωₙ^2 / (s^2 + 2 * damping * ωₙ * s + ωₙ^2)
+``H(s) = k \\frac{ωₙ^2}{ s^2 + 2 \\gamma ωₙ s + ωₙ^2}``
 
-where ωₙ = 2π / tau
+where ωₙ = 2π / `tau`, ``\\gamma`` is `damping` and `k` is `gain`.
 """
-function get_lpf(fs::Float64, tau::Float64, damping::Float64, gain::Float64)
+function get_lpf(
+    fs::Float64,
+    tau::Float64,
+    damping::Float64,
+    gain::Float64,
+)::SecondOrderSections
     ωₙ = 2π / tau
     b = [0.0, 0.0, ωₙ^2] .* gain
     a = [2 * damping * ωₙ, ωₙ^2]
@@ -341,14 +347,20 @@ end
 
 """
     dribble(
-    data::Vector{Float64},
-    decay_time_constant::Float64,
-    fs::Float64,
+        data::Vector{Float64},
+        decay_time_constant::Float64,
+        fs::Float64,
+    )::Vector{Float64}
 
-)::Vector{Float64}
+Function to model dribble effect when gas command falls too sharply due to remaining
+gas in the pipe. The function compares change in `data`(`ΔD`) at every time step with
 
-Function to modle dribble effect when gas command falls too sharply due to remaining
-gas in the pipe.
+``ΔD < -\\frac{1}{τ f_s} e^{ - \\left( \\frac{1}{τ f_s} \\right) }``
+
+where `τ`(`decay_time_constant`) is the decay time constant and ``f_s``(`f_s`) is the
+sampling frequency. If the above condition is found true, the function forces `data` to
+decay exponentially with the decay time constant untill the condition is false. The
+function returns the modified `data`.
 """
 function dribble(
     data::Vector{Float64},
@@ -373,19 +385,18 @@ end
 
 """
     downsample_smooth(
-    tt::Vector{Float64},
-    data::Vector{Float64},
-    dt_res::Float64;
-    default_start=0.0,
-
-)::Vector{Float64}
+        tt::Vector{Float64},
+        data::Vector{Float64},
+        dt_res::Float64;
+        default_start=0.0,
+    )::Vector{Float64}
 
 Downsample and smooth the data to a new time resolution. The time axis does not need to
 be equally spaced in time. The function creates a new time axis with spacing given by
-dt_res and then averages the data points that fall within the new time bin. If no data
+`dt_res` and then averages the data points that fall within the new time bin. If no data
 points fall within the new time bin, the function uses the last data point to fill the
-new time bin. default_start is used to fill first time bin if no data is present in the
-first time bin.
+new time bin. `default_start` is used to fill first time bin if no data is present in
+the first time bin.
 """
 function downsample_smooth(
     tt::Vector{Float64},
@@ -399,19 +410,18 @@ end
 
 """
     downsample_smooth(
-    tt::Vector{Float64},
-    data::Vector{Float64},
-    tt_res::Vector{Float64};
-    default_start=0.0,
-
-)::Vector{Float64}
+        tt::Vector{Float64},
+        data::Vector{Float64},
+        tt_res::Vector{Float64};
+        default_start=0.0,
+    )::Vector{Float64}
 
 Downsample and smooth the data to a new time resolution. The time axis does not need to
-be equally spaced in time. The function uses tt_res as the new resampled time axis and
+be equally spaced in time. The function uses `tt_res` as the new resampled time axis and
 averages the data points that fall within the new time bin. If no data points fall
 within the new time bin, the function uses the last data point to fill the new time bin.
-default_start is used to fill first time bin if no data is present in the first time
-bin. Note that tt_res need not be equally spaced in time either.
+`default_start` is used to fill first time bin if no data is present in the first time
+bin. Note that `tt_res` need not be equally spaced in time either.
 """
 function downsample_smooth(
     tt::Vector{Float64},
@@ -440,17 +450,16 @@ end
 
 """
     find_delay(
-    data1::Vector{Float64},
-    data2::Vector{Float64},
-    dt::Float64,
-
-)::Float64
+        data1::Vector{Float64},
+        data2::Vector{Float64},
+        dt::Float64,
+    )::Float64
 
 Find the delay between two signals using cross-correlation. The function returns the
-delay in seconds. The function assumes that data1 is the reference signal and data2 is
-the signal that is delayed with respect to data1. The funciton assumes that data1 and
-data2 are sampled at the same rate and are of same length. dt is the time resolution of
-the data.
+delay in seconds. The function assumes that `data1` is the reference signal and `data2`
+is the signal that is delayed with respect to `data1`. The funciton assumes that `data1`
+and `data2` are sampled at the same rate and are of same length. `dt` is the time
+resolution of the data.
 """
 function find_delay(
     data1::Vector{Float64},
@@ -466,9 +475,9 @@ end
 
 Non linear gas injection model. The model is given by:
 
-    y = p₁ * (√(x²p₂² + 1) - 1)
+``\\Gamma = p_1 (\\sqrt{x^2 p_2^2 + 1} - 1)``
 
-where x is the input voltage in Volts and y is the flow rate in Pa m³/ s
+where `x` is the input voltage in Volts and ``\\Gamma`` is the flow rate in Pa m³/ s
 """
 function gi_model(x::Vector{Float64}, p::Vector{Float64})::Vector{Float64}
     return p[1] .* (sqrt.((x .* p[2]) .^ 2 .+ 1) .- 1)  # Pa m³/ s
@@ -491,26 +500,31 @@ end
 
 """
     get_gas_injection_response(
-    cmd::Vector{Float64},
-    cmd_tt::Vector{Float64},
-    P_ves::Vector{Float64},
-    P_ves_tt::Vector{Float64},
-    V_ves::Float64;
-    resample_dt::Float64=0.02,
-    gi_fit_guess::Vector{Float64}=[1.0, 1.0],
-    response_curve_voltage::Vector{Float64}=collect(0:0.001:11),
-
-)::Tuple{IMASDD.gas_injection__valve___response_curve, Dict{Symbol, Any}}
+        cmd::Vector{Float64},
+        cmd_tt::Vector{Float64},
+        P_ves::Vector{Float64},
+        P_ves_tt::Vector{Float64},
+        V_ves::Float64;
+        resample_dt::Float64=0.02,
+        gi_fit_guess::Vector{Float64}=[1.0, 1.0],
+        response_curve_voltage::Vector{Float64}=collect(0:0.001:11),
+    )::Tuple{IMASDD.gas_injection__valve___response_curve, Dict{Symbol, Any}}
 
 Function to fit a gas calibration shot data to a gas injection model. It requires 2 set
-of data, cmd, and cmd_tt are the command sent in Volts and the corresponding time axis.
-P_ves and P_ves_tt are the pressure in the vessel and the corresponding time axis. V_ves
-is the volume of the vessel. The function returns a response_curve object and a valve
-model dictionary that can be used in compute_gas_injection function.
+of data:
+
+  - `cmd`, and `cmd_tt` are the command sent in Volts and the corresponding time axis.
+  - `P_ves` and `P_ves_tt` are the pressure in the vessel and the corresponding time axis.
+
+`V_ves` is the volume of the vessel. The function returns a tuple of `response_curve`
+object and a valve model dictionary that can be used in
+[`compute_gas_injection!`](@ref) or [`compute_gas_injection`](@ref) functions.
+
 Optional keyword arguments:
-resample_dt: Time resolution to resample the data.
-gi_fit_guess: Initial guess for the gas injection model parameters.
-response_curve_voltage: Voltage axis for storing the response curve.
+
+  - `resample_dt`: Time resolution to resample the data.
+  - `gi_fit_guess`: Initial guess for the gas injection model parameters.
+  - `response_curve_voltage`: Voltage axis for storing the response curve.
 """
 function get_gas_injection_response(
     cmd::Vector{Float64},
@@ -556,6 +570,14 @@ function get_gas_injection_response(
     return response_curve, valve_model
 end
 
+"""
+    get_required_gas_cmd(
+            required_flow_rate::Float64,
+            response_curve::IMASDD.gas_injection__valve___response_curve,
+        )::Float64
+
+Function to get the required gas command voltage to achieve the required flow rate.
+"""
 function get_required_gas_cmd(
     required_flow_rate::Float64,
     response_curve::IMASDD.gas_injection__valve___response_curve,
@@ -564,6 +586,14 @@ function get_required_gas_cmd(
     return gas_cmd(required_flow_rate)
 end
 
+"""
+    get_required_gas_cmd(
+        required_flow_rate::Vector{Float64},
+        response_curve::IMASDD.gas_injection__valve___response_curve,
+    )::Vector{Float64}
+
+Function to get the required gas command voltage to achieve the required flow rate.
+"""
 function get_required_gas_cmd(
     required_flow_rate::Vector{Float64},
     response_curve::IMASDD.gas_injection__valve___response_curve,

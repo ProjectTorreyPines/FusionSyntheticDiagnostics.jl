@@ -1,9 +1,18 @@
-"""
-    add_interferometer(
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd(),
-    config::String=default_ifo,
+using StaticArrays
+import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, m_u, e
+import QuadGK: quadgk, BatchIntegrand
+import GGDUtils: interp, get_grid_subset, get_subset_boundary, subset_do, get_TPS_mats
 
-)::IMASDD.dd
+export add_interferometer!, compute_interferometer!, compute_interferometer
+
+default_ifo = "$(@__DIR__)/default_interferometer.json"
+
+"""
+    add_interferometer!(
+        config::String=default_ifo,
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+    )::IMASDD.dd
 
 Add interferometer to IMAS structure using a JSON file and compute the
 line integrated electron density if not present
@@ -30,11 +39,11 @@ function add_interferometer!(
 end
 
 """
-    add_interferometer(
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd(),
-    config::Dict{Symbol, Any},
-
-)::IMASDD.dd
+    add_interferometer!(
+        config::Dict{Symbol, Any},
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+    )::IMASDD.dd
 
 Add interferometer to IMAS structure using a Dict and compute the line integrated
 electron density if not present
@@ -92,10 +101,15 @@ function add_interferometer!(
 end
 
 """
-    compute_interferometer(@nospecialize(ids::IMASDD.dd))
+    compute_interferometer!(
+        @nospecialize(ids::IMASDD.dd);
+        rtol::Float64=1e-3,
+        n_e_gsi::Int=5,
+    )
 
-  - Calculate phase_to_n_e_line if not present for each wavelength
-  - Compute the line integrated electron density if not present
+Computed the line integrated electron density from the interferometer data present in
+IDS structure for all the chords. The computation is based on the edge profile data
+and core profile data present in the IDS structure.
 """
 function compute_interferometer!(
     @nospecialize(ids::IMASDD.dd);

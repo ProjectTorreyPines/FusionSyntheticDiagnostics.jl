@@ -1,10 +1,9 @@
 # SynthDiag.jl
 
-![Format Check](https://github.com/ProjectTorreyPines/GGDUtils.jl/actions/workflows/format_check.yml/badge.svg)
+![Format Check](https://github.com/ProjectTorreyPines/SynthDiag.jl/actions/workflows/format_check.yml/badge.svg)
+![Docs](https://github.com/ProjectTorreyPines/SynthDiag.jl/actions/workflows/make_docs.yml/badge.svg)
 
-
-Package that defined synthetic diagnostics to generate sensor data based on plasma
-profile.
+Package that defines synthetic diagnostics to generate sensor data based on plasma profile and syntehtic actuators. For installation and usage instructions, see the [online documentation](https://projecttorreypines.github.io/SynthDiag.jl/stable). For documentation on under development branch, see [dev online documentation](https://projecttorreypines.github.io/SynthDiag.jl/dev).
 
 ## Building julia environment (installation)
 

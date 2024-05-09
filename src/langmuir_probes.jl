@@ -1,15 +1,18 @@
 import GGDUtils: interp, get_types_with
-using PhysicalConstants.CODATA2018: m_e, m_u, e
+import PhysicalConstants.CODATA2018: m_e, m_u, e
+
+export add_langmuir_probes!, compute_langmuir_probes!, langmuir_probe_current
+
+default_lp = "$(@__DIR__)/default_langmuir_probes.json"
 
 """
     add_langmuir_probes!(
-    config::String=default_lp,
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite=false, verbose=false, kwargs...,
+        config::String=default_lp,
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite=false, verbose=false, kwargs...,
+    )::IMASDD.dd
 
-)::IMASDD.dd
-
-Add langmuir_probes positions and other parameters from json file to ids structure
+Add langmuir probes positions and other parameters from `JSON` file to ids structure
 """
 function add_langmuir_probes!(
     config::String=default_lp,
@@ -33,13 +36,12 @@ end
 
 """
     add_langmuir_probes!(
-    config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite=false, verbose=false, kwargs...,
+        config::Dict{Symbol, Any},
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite=false, verbose=false, kwargs...,
+    )::IMASDD.dd
 
-)::IMASDD.dd
-
-Add langmuir_probes positions and other parameters from Dictionary to ids structure
+Add langmuir probes positions and other parameters from Dictionary to ids structure
 """
 function add_langmuir_probes!(
     config::Dict{Symbol, Any},
@@ -123,6 +125,47 @@ function add_langmuir_probes!(
     return ids
 end
 
+"""
+    compute_langmuir_probes!(
+        ids::IMASDD.dd;
+        v_plasma::Union{Float64, Vector{Float64}, Nothing}=nothing,
+        v_floating::Union{Float64, Vector{Float64}, Nothing}=nothing,
+        v_probe::Union{Float64, Vector{Float64}, Nothing}=nothing,
+        v_plasma_noise::Union{Noise, Nothing}=nothing,
+        Z_eff::Float64=1.0,
+        m_i_amu::Float64=2.014, # Deuterium
+        probe_type::Symbol=:cylindrical,
+        ne_noise::Union{Noise, Nothing}=nothing,
+        te_noise::Union{Noise, Nothing}=nothing,
+        ti_noise::Union{Noise, Nothing}=nothing,
+        n_e_gsi::Int=5,
+    )
+
+Compute langmuir probe outputs for all the embedded langmuir probes in the ids structure
+using edge profiles data. If `v_plasma` or `v_floating` are provided along with
+`v_probe`, then [`langmuir_probe_current()`](@ref) is used to compute the ion saturation
+current and parallel current density and stored in the IDS. Noise models can be added
+for electron density and temperature and ion average temperature as power spectral
+densities using data type [`Noise`](@ref).
+
+Input arguments:
+
+  - `ids`: IMASDD.dd object
+  - `v_plasma`: Plasma potential (in V) or a vector of plasma potentials for each time
+    step
+  - `v_floating`: Floating potential (in V) or a vector of floating potentials for each
+    time step
+  - `v_probe`: Probe potential (in V) or a vector of probe potentials for each time step
+  - `v_plasma_noise`: Noise object for plasma potential
+  - `Z_eff`: Effective charge of the ion
+  - `m_i_amu`: Ion mass in atomic mass units (amu)
+  - `probe_type`: Type of the probe, either :cylindrical or :spherical
+  - `ne_noise`: Noise object for electron density
+  - `te_noise`: Noise object for electron temperature
+  - `ti_noise`: Noise object for average ion temperature
+  - `n_e_gsi`: Grid subset index that is used in edge profiles data for electron density,
+    electron temperature, and average ion temperature.
+"""
 function compute_langmuir_probes!(
     ids::IMASDD.dd;
     v_plasma::Union{Float64, Vector{Float64}, Nothing}=nothing,
@@ -134,13 +177,13 @@ function compute_langmuir_probes!(
     probe_type::Symbol=:cylindrical,
     ne_noise::Union{Noise, Nothing}=nothing,
     te_noise::Union{Noise, Nothing}=nothing,
+    ti_noise::Union{Noise, Nothing}=nothing,
     n_e_gsi::Int=5,
 )
     epggd = ids.edge_profiles.ggd
     nt = length(epggd)
     fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
     ep_grid_ggd = ids.edge_profiles.grid_ggd[1]
-    # TPS_mats_all_cells = get_TPS_mats(ep_grid_ggd, n_e_gsi)
 
     TPS_mats = get_TPS_mats(ep_grid_ggd, n_e_gsi)
 
@@ -177,6 +220,11 @@ function compute_langmuir_probes!(
     if !isnothing(te_noise)
         for emb_lp ∈ ids.langmuir_probes.embedded
             emb_lp.t_e.data .+= generate_noise(te_noise, emb_lp.time)
+        end
+    end
+    if !isnothing(ti_noise)
+        for emb_lp ∈ ids.langmuir_probes.embedded
+            emb_lp.t_i.data .+= generate_noise(ti_noise, emb_lp.time)
         end
     end
 
@@ -250,28 +298,47 @@ end
 
 """
     langmuir_probe_current(
-    Δv::Float64,
-    Te::Float64,
-    Ti=::Float64,
-    ne::Float64,
-    A::Float64,
-    m_i_amu=2.04,
-    Z_eff::Float64=1.0;
-    probe_type::Symbol=:cylindrical,
-
-)::Float64
+        Δv::Float64,
+        Te::Float64,
+        Ti=::Float64,
+        ne::Float64,
+        A::Float64,
+        m_i_amu=2.04,
+        Z_eff::Float64=1.0;
+        probe_type::Symbol=:cylindrical,
+    )::Float64
 
 Langmuir Probe current model for cylindrical and spherical probes.
 
-    Input arguments:
-    - Δv: Bias voltage (v_probe - v_plasma)
-    - Te: Electron temperature (in eV)
-    - Ti: Ion temperature (in eV)
-    - ne: Electron density (in m^-3)
-    - A: Surface area of the probe (in m^2)
-    - m_i_amu: Ion mass in atomic mass units (amu)
-    - Z_eff: Effective charge of the ion (in units of elementary charge e)
-    - probe_type: Type of the probe, either :cylindrical or :spherical
+For `Δv` <= 0:
+
+``I_{probe} = -I_{isc} (1 - \\frac{Δv}{T_i})^{ex} - I_{esc} e^{\\frac{Δv}{T_e}}``
+
+For `Δv` > 0:
+
+``I_{probe} = -I_{esc} (1 + \\frac{Δv}{T_e})^{ex} - I_{isc} e^{-\\frac{Δv}{T_i}}``
+
+where
+
+``I_{isc} = \\frac{1}{2} A q_i n_e \\sqrt{e (T_e + T_i) / m_i}``
+
+``I_{esc} = -\\frac{1}{4} A e n_e \\sqrt{8 e T_e / m_e}``
+
+where `A` is the effective surface area of the probe, `q_i`(`Z_eff`e) is the total
+charge of the ion, and `ex` is 1 for spherical and 0.5 for cylindrical probes.
+
+Input arguments:
+
+  - `Δv`: Bias voltage (`v_probe` - `v_plasma`)
+  - `Te`: Electron temperature (in eV)
+  - `Ti`: Ion temperature (in eV)
+  - `ne`: Electron density (in ``m^{-3}``)
+  - `A`: Effective surface area of the probe (in ``m^{2}``)
+  - `m_i_amu`: Ion mass in atomic mass units (amu)
+  - `Z_eff`: Effective charge of the ion (in units of elementary charge e)
+  - `probe_type`: Type of the probe, either :cylindrical or :spherical
+
+Ref: L. Conde, "[An introduction to Langmuir probe diagnostics of plasmas](https://api.semanticscholar.org/CorpusID:53622081)" (2011)
 """
 function langmuir_probe_current(
     Δv::Float64,
@@ -317,14 +384,13 @@ end
 
 """
     init_data!(
-    q::Union{
-        IMASDD.langmuir_probes__embedded,
-        IMASDD.langmuir_probes__reciprocating___plunge,
-        IMASDD.langmuir_probes__reciprocating___plunge___collector,
-    },
-    nt::Int64,
-
-)
+        q::Union{
+            IMASDD.langmuir_probes__embedded,
+            IMASDD.langmuir_probes__reciprocating___plunge,
+            IMASDD.langmuir_probes__reciprocating___plunge___collector,
+        },
+        nt::Int64,
+    )
 
 Initialize each data field in an embedded langmuir probe.
 
@@ -358,14 +424,13 @@ end
 
 """
     init_data!(
-    q::Union{
-        IMASDD.langmuir_probes__embedded,
-        IMASDD.langmuir_probes__reciprocating___plunge,
-        IMASDD.langmuir_probes__reciprocating___plunge___collector,
-    },
-    t::Vector{Float64},
-
-)
+        q::Union{
+            IMASDD.langmuir_probes__embedded,
+            IMASDD.langmuir_probes__reciprocating___plunge,
+            IMASDD.langmuir_probes__reciprocating___plunge___collector,
+        },
+        t::Vector{Float64},
+    )
 
 Initialize probes data fields along with a time vector t for the time storing field
 which is :time for embedded probes and :time_within_plunge for reciprocating probes.
