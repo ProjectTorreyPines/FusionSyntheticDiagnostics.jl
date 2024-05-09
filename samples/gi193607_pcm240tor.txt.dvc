@@ -1,0 +1,12 @@
+md5: b4123a207f4cfc46b812d7d67bd59182
+frozen: true
+deps:
+- path: misc_data_files/gi193607_pcm240tor.txt
+  repo:
+    url: git@github.com:ProjectTorreyPines/SOLPSTestSamples.git
+    rev_lock: 1b6c7049dab9eb884c0c7615599eefe613c5e703
+outs:
+- md5: 9a63d88b2d9599725de118570b18e563
+  size: 105257802
+  hash: md5
+  path: gi193607_pcm240tor.txt

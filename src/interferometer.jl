@@ -1,74 +1,156 @@
-"""
-    add_interferometer(
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
-    config::String=default_ifo,
+using StaticArrays
+import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, m_u, e
+import QuadGK: quadgk, BatchIntegrand
+import GGDUtils: interp, get_grid_subset, get_subset_boundary, subset_do, get_TPS_mats
 
-)::OMAS.dd
+export add_interferometer!, compute_interferometer!, compute_interferometer
+
+default_ifo = "$(@__DIR__)/default_interferometer.json"
+
+"""
+    add_interferometer!(
+        config::String=default_ifo,
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+    )::IMASDD.dd
 
 Add interferometer to IMAS structure using a JSON file and compute the
 line integrated electron density if not present
 """
 function add_interferometer!(
     config::String=default_ifo,
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
-)::OMAS.dd
+    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+)::IMASDD.dd
     if endswith(config, ".json")
-        OMAS.json2imas(config, ids)
+        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
+        add_interferometer!(
+            config_dict,
+            ids;
+            overwrite=overwrite,
+            verbose=verbose,
+            rtol=rtol,
+            n_e_gsi=n_e_gsi,
+        )
     else
         error("Only JSON files are supported.")
     end
-    compute_interferometer(ids)
     return ids
 end
 
 """
-    add_interferometer(
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
-    config::Dict{Symbol, Any},
-
-)::OMAS.dd
+    add_interferometer!(
+        config::Dict{Symbol, Any},
+        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+    )::IMASDD.dd
 
 Add interferometer to IMAS structure using a Dict and compute the line integrated
 electron density if not present
 """
 function add_interferometer!(
     config::Dict{Symbol, Any},
-    @nospecialize(ids::OMAS.dd)=OMAS.dd(),
-)::OMAS.dd
-    OMAS.dict2imas(config, ids)
-    compute_interferometer(ids)
+    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+)::IMASDD.dd
+    # Check for duplicates
+    if length(ids.interferometer.channel) > 0
+        duplicate_indices = []
+        new_channels = Dict(
+            ch[:name] => ch[:identifier] for
+            ch ∈ config[:interferometer][:channel]
+        )
+        for (ii, ch) ∈ enumerate(ids.interferometer.channel)
+            if ch.name in keys(new_channels) ||
+               ch.identifier in values(new_channels)
+                append!(duplicate_indices, ii)
+            end
+        end
+        if overwrite
+            for ii ∈ reverse(duplicate_indices)
+                println(
+                    "Overwriting interferometer channel ",
+                    "$(ids.interferometer.channel[ii].name)...",
+                )
+                deleteat!(ids.interferometer.channel, ii)
+            end
+        else
+            if length(duplicate_indices) > 0
+                err_msg =
+                    "Duplicate interferometer channels found with " *
+                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
+                for ii ∈ duplicate_indices
+                    err_msg *=
+                        "$(ids.interferometer.channel[ii].identifier): " *
+                        "$(ids.interferometer.channel[ii].name)\n"
+                end
+                err_msg *= "Use overwrite=true to replace them."
+                throw(OverwriteAttemptError(err_msg))
+            end
+        end
+        config[:interferometer] =
+            mergewith(
+                append!,
+                IMASDD.imas2dict(ids.interferometer),
+                config[:interferometer],
+            )
+    end
+    IMASDD.dict2imas(config, ids; verbose=verbose)
+    compute_interferometer!(ids; rtol=rtol, n_e_gsi=n_e_gsi)
     return ids
 end
 
 """
-    compute_interferometer(@nospecialize(ids::OMAS.dd))
+    compute_interferometer!(
+        @nospecialize(ids::IMASDD.dd);
+        rtol::Float64=1e-3,
+        n_e_gsi::Int=5,
+    )
 
-  - Calculate phase_to_n_e_line if not present for each wavelength
-  - Compute the line integrated electron density if not present
+Computed the line integrated electron density from the interferometer data present in
+IDS structure for all the chords. The computation is based on the edge profile data
+and core profile data present in the IDS structure.
 """
-function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
+function compute_interferometer!(
+    @nospecialize(ids::IMASDD.dd);
+    rtol::Float64=1e-3,
+    n_e_gsi::Int=5,
+)
+    # Compute phase_to_n_e_line if not present
+    for ch ∈ ids.interferometer.channel
+        k = @SVector[2π / ch.wavelength[ii].value for ii ∈ 1:2]
+        for i1 ∈ 1:2
+            lam = ch.wavelength[i1]
+            i2 = i1 % 2 + 1
+            if IMASDD.ismissing(lam, :phase_to_n_e_line)
+                # Taken from https://doi.org/10.1063/1.1138037
+                lam.phase_to_n_e_line =
+                    (
+                        2 * m_e * ε_0 * c_0^2 / e^2 * (k[i1] * k[i2]^2) /
+                        (k[i2]^2 - k[i1]^2)
+                    ).val
+            end
+        end
+    end
+
     fix_eq_time_idx = length(ids.equilibrium.time_slice) == 1
     fix_ep_grid_ggd_idx = length(ids.edge_profiles.grid_ggd) == 1
 
     ep_grid_ggd = ids.edge_profiles.grid_ggd[1]
     ep_space = ep_grid_ggd.space[1]
     sep_bnd = get_sep_bnd(ep_grid_ggd)
-    # Using -5 for now to use the SOLPS edge profile grid only
-    TPS_mats = get_TPS_mats(ep_grid_ggd, -5)
 
     epggd = ids.edge_profiles.ggd
     cpp1d = ids.core_profiles.profiles_1d
     nt = length(epggd)
 
+    TPS_mats = get_TPS_mats(ep_grid_ggd, n_e_gsi)
+
     ep_n_e_list = [
         interp(
             epggd[ii].electrons.density,
-            update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, -5, TPS_mats),
-            5,
-            # Note the grid_subset index 5 is used here to get the electron density
-            # data from SOLPS edge profile. This is a bug in SD4SOLPS. On adding
-            # edge extension, it should update all quantitites that refered to
-            # grid_subset index 5 to -5.
+            update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, n_e_gsi, TPS_mats),
+            n_e_gsi,
         ) for ii ∈ eachindex(epggd)
     ]
     cp_n_e_list = [
@@ -80,21 +162,26 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
     ]
 
     for ch ∈ ids.interferometer.channel
-        k = @SVector[2π / ch.wavelength[ii].value for ii ∈ 1:2]
-        for i1 ∈ 1:2
-            lam = ch.wavelength[i1]
-            i2 = i1 % 2 + 1
-            if lam.phase_to_n_e_line == 0
-                # Taken from https://doi.org/10.1063/1.1138037
-                lam.phase_to_n_e_line =
-                    (
-                        2 * m_e * ε_0 * c_0^2 / e^2 * (k[i1] * k[i2]^2) /
-                        (k[i2]^2 - k[i1]^2)
-                    ).val
-            end
+        # Special case when measurement has not been made for some time steps 
+        # but edge profile data exists
+        proceed =
+            (IMASDD.ismissing(ch.n_e_line, :time) || IMASDD.isempty(ch.n_e_line.time))
+        if !proceed
+            proceed = length(ch.n_e_line.time) < length(epggd)
         end
-        # Special case when measurement has not been made but edge profile data exists
-        if length(ch.n_e_line.time) == 0 && length(ids.edge_profiles.ggd) > 0
+        if proceed
+            # Check if core_profile is available
+            if length(cpp1d) != length(epggd)
+                error(
+                    "Number of edge profiles time slices does not match number " \
+                    "of core profile time slices. Please ensure core profile " \
+                    "data for electron density is present in the data structure. " \
+                    "You might want to run " \
+                    "SD4SOLPS.fill_in_extrapolated_core_profile!" \
+                    "(dd, \"electrons.density\"; method=core_method))",
+                )
+            end
+
             ch.n_e_line.time = zeros(nt)
             ch.n_e_line_average.time = zeros(nt)
             ch.n_e_line.data = zeros(nt)
@@ -104,27 +191,18 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
                 lam.phase_corrected.data = zeros(nt)
             end
 
-            # Check if core_profile is available
-            if length(cpp1d) != length(epggd)
-                error(
-                    "Number of edge profiles time slices does not match number of " \
-                    "core profile time slices. Please ensure core profile data for " \
-                    "electron density is present in the data structure. You might " \
-                    "want to run SD4SOLPS.fill_in_extrapolated_core_profile!" \
-                    "(dd, \"electrons.density\"; method=core_method))",
-                )
-            end
             # Parametrize line of sight
             fp = rzphi2xyz(ch.line_of_sight.first_point)
             sp = rzphi2xyz(ch.line_of_sight.second_point)
             tp = rzphi2xyz(ch.line_of_sight.third_point)
             if ch.line_of_sight.third_point ==
-               OMAS.interferometer__channel___line_of_sight__third_point()
+               IMASDD.interferometer__channel___line_of_sight__third_point()
                 chord_points = (fp, sp)
             else
                 chord_points = (fp, sp, tp)
             end
-            core_chord_length = get_core_chord_length(sep_bnd, ep_space, chord_points)
+            core_chord_length =
+                get_core_chord_length(sep_bnd, ep_space, chord_points)
 
             for ii ∈ eachindex(epggd)
                 ch.n_e_line.time[ii] = epggd[ii].time
@@ -153,7 +231,8 @@ function compute_interferometer(@nospecialize(ids::OMAS.dd), rtol::Float64=1e-3)
                     end
 
                 ch.n_e_line.data[ii] = quadgk(integ, 0, 1; rtol=rtol)[1]
-                ch.n_e_line_average.data[ii] = ch.n_e_line.data[ii] / core_chord_length
+                ch.n_e_line_average.data[ii] =
+                    ch.n_e_line.data[ii] / core_chord_length
                 for lam ∈ ch.wavelength
                     lam.phase_corrected.time[ii] = epggd[ii].time
                     lam.phase_corrected.data[ii] =
@@ -175,9 +254,9 @@ end
 
 function get_sep_bnd(ep_grid_ggd)
     ep_space = ep_grid_ggd.space[1]
-    core = get_grid_subset_with_index(ep_grid_ggd, 22)
-    sol = get_grid_subset_with_index(ep_grid_ggd, 23)
-    sep_bnd = OMAS.edge_profiles__grid_ggd___grid_subset()
+    core = get_grid_subset(ep_grid_ggd, 22)
+    sol = get_grid_subset(ep_grid_ggd, 23)
+    sep_bnd = IMASDD.edge_profiles__grid_ggd___grid_subset()
     sep_bnd.element =
         subset_do(
             intersect,
@@ -188,26 +267,12 @@ function get_sep_bnd(ep_grid_ggd)
 end
 
 @inline function rzphi2xyz(
-    point::Union{OMAS.interferometer__channel___line_of_sight__first_point,
-        OMAS.interferometer__channel___line_of_sight__second_point,
-        OMAS.interferometer__channel___line_of_sight__third_point},
+    point::Union{IMASDD.interferometer__channel___line_of_sight__first_point,
+        IMASDD.interferometer__channel___line_of_sight__second_point,
+        IMASDD.interferometer__channel___line_of_sight__third_point},
 )
     r, z, phi = point.r, point.z, point.phi
     return r * cos(phi), r * sin(phi), z
-end
-
-@inline function xyz2rz(x::Float64, y::Float64, z::Float64)
-    r = sqrt(x^2 + y^2)
-    return r, z
-end
-
-function update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, gsi, TPS_mats)
-    if !fix_ep_grid_ggd_idx
-        ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
-        return get_TPS_mats(ep_grid_ggd, gsi)
-    else
-        return TPS_mats
-    end
 end
 
 @inline function line_of_sight(

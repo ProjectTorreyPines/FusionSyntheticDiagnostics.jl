@@ -1,0 +1,40 @@
+name: Make Docs
+on:
+  pull_request:
+    branches: ["master", "dev"]
+  push:
+    branches:
+      - master
+      - dev
+      - docs
+    paths:
+      - '.github/workflows/make_docs.yml'
+      - 'src/'
+      - 'docs/**'
+    tags: '*'
+  workflow_dispatch:
+    
+jobs:
+  make_docs:
+    permissions:
+      actions: write
+      contents: write
+      statuses: write
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@latest
+      - uses: julia-actions/cache@v1
+      - name: Extract branch name
+        shell: bash
+        run: echo "branch=${GITHUB_BASE_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+        id: extract_branch
+      - name: Install dependencies
+        run: |
+          julia --project=docs/ -e 'using Pkg; Pkg.add(; url="https://github.com/ProjectTorreyPines/IMASDD.jl.git"); Pkg.add(; url="https://github.com/ProjectTorreyPines/GGDUtils.jl.git", rev="${{ steps.extract_branch.outputs.branch }}"); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+      - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+        run: julia --project=docs/ docs/make.jl
