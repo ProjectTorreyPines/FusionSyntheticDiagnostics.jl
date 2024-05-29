@@ -7,120 +7,28 @@ default_lp = "$(@__DIR__)/default_langmuir_probes.json"
 
 """
     add_langmuir_probes!(
-        config::String=default_lp,
+        config::Union{String, Dict{Symbol, Any}}=default_lp,
         @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
         overwrite=false, verbose=false, kwargs...,
     )::IMASDD.dd
 
-Add langmuir probes positions and other parameters from `JSON` file to ids structure
+Add langmuir probes positions and other parameters from `JSON` file or Julia `Dict` to
+ids structure and compute langmuir probe outputs using edge profiles data. `kwargs` are
+passed to [`compute_langmuir_probes!`](@ref).
 """
 function add_langmuir_probes!(
-    config::String=default_lp,
+    config::Union{String, Dict{Symbol, Any}}=default_lp,
     @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
     overwrite=false, verbose=false, kwargs...,
 )::IMASDD.dd
-    if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
-        add_langmuir_probes!(
-            config_dict,
-            ids;
-            overwrite=overwrite,
-            verbose=verbose,
-            kwargs...,
-        )
-    else
-        error("Only JSON files are supported.")
-    end
-    return ids
-end
-
-"""
-    add_langmuir_probes!(
-        config::Dict{Symbol, Any},
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-        overwrite=false, verbose=false, kwargs...,
-    )::IMASDD.dd
-
-Add langmuir probes positions and other parameters from Dictionary to ids structure
-"""
-function add_langmuir_probes!(
-    config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite=false, verbose=false, kwargs...,
-)::IMASDD.dd
-    # Check for duplicates
-    if length(ids.langmuir_probes.embedded) > 0
-        new_lps = Dict()
-        if haskey(config, :langmuir_probes)
-            if haskey(config[:langmuir_probes], :embedded)
-                for emp_lps ∈ config[:langmuir_probes][:embedded]
-                    new_lps[emp_lps[:name]] = emp_lps[:identifier]
-                end
-            end
-            if haskey(config[:langmuir_probes], :reciprocating)
-                for rec_lp ∈ config[:langmuir_probes][:reciprocating]
-                    new_lps[rec_lp[:name]] = rec_lp[:identifier]
-                end
-            end
-        else
-            warning("Config does not have langmuir_probes in it. Skipping.")
-            return ids
-        end
-        dup_inds = Dict(:emb_lp => [], :rec_lp => [])
-        for (ii, emb_lp) ∈ enumerate(ids.langmuir_probes.embedded)
-            if emb_lp.name in keys(new_lps) ||
-               emb_lp.identifier in values(new_lps)
-                append!(dup_inds[:emb_lp], ii)
-            end
-        end
-        for (ii, rec_lp) ∈ enumerate(ids.langmuir_probes.reciprocating)
-            if rec_lp.name in keys(new_lps) ||
-               rec_lp.identifier in values(new_lps)
-                append!(dup_inds[:rec_lp], ii)
-            end
-        end
-        if overwrite
-            for ii ∈ reverse(dup_inds[:emb_lp])
-                println(
-                    "Overwriting embedded langmuir_probe ",
-                    "$(ids.langmuir_probes.embedded[ii].name)...",
-                )
-                deleteat!(ids.langmuir_probes.embedded, ii)
-            end
-            for ii ∈ reverse(dup_inds[:rec_lp])
-                println(
-                    "Overwriting reciprocating langmuir_probes ",
-                    "$(ids.langmuir_probes.reciprocating[ii].name)...",
-                )
-                deleteat!(ids.langmuir_probes.reciprocating, ii)
-            end
-        else
-            if length(dup_inds[:emb_lp]) + length(dup_inds[:rec_lp]) > 0
-                err_msg =
-                    "Duplicate langmuir_probes embeddeds found with " *
-                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
-                for ii ∈ dup_inds[:emb_lp]
-                    err_msg *=
-                        "$(ids.langmuir_probes.embedded[ii].identifier): " *
-                        "$(ids.langmuir_probes.embedded[ii].name)\n"
-                end
-                for ii ∈ dup_inds[:rec_lp]
-                    err_msg *=
-                        "$(ids.langmuir_probes.reciprocating[ii].identifier): " *
-                        "$(ids.langmuir_probes.reciprocating[ii].name)\n"
-                end
-                err_msg *= "Use overwrite=true to replace them."
-                throw(OverwriteAttemptError(err_msg))
-            end
-        end
-        config[:langmuir_probes] =
-            mergewith(
-                append!,
-                IMASDD.imas2dict(ids.langmuir_probes),
-                config[:langmuir_probes],
-            )
-    end
-    IMASDD.dict2imas(config, ids; verbose=verbose)
+    add_diagnostic!(
+        config,
+        :langmuir_probes,
+        ids;
+        overwrite=overwrite,
+        verbose=verbose,
+        channel=[:embedded, :reciprocating],
+    )
     compute_langmuir_probes!(ids; kwargs...)
     return ids
 end

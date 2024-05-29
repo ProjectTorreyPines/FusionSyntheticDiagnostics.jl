@@ -9,94 +9,22 @@ default_ifo = "$(@__DIR__)/default_interferometer.json"
 
 """
     add_interferometer!(
-        config::String=default_ifo,
+        config::Union{String, Dict{Symbol, Any}}=default_ifo,
         @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+        overwrite::Bool=false, verbose::Bool=false, kwargs...,
     )::IMASDD.dd
 
-Add interferometer to IMAS structure using a JSON file and compute the
-line integrated electron density if not present
+Add interferometer to IMAS structure using a `JSON` file or Julia `Dict` and compute
+the line integrated electron density if not present. `kwargs` are passed to
+[`compute_interferometer!`](@ref).
 """
 function add_interferometer!(
-    config::String=default_ifo,
+    config::Union{String, Dict{Symbol, Any}}=default_ifo,
     @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+    overwrite::Bool=false, verbose::Bool=false, kwargs...,
 )::IMASDD.dd
-    if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
-        add_interferometer!(
-            config_dict,
-            ids;
-            overwrite=overwrite,
-            verbose=verbose,
-            rtol=rtol,
-            n_e_gsi=n_e_gsi,
-        )
-    else
-        error("Only JSON files are supported.")
-    end
-    return ids
-end
-
-"""
-    add_interferometer!(
-        config::Dict{Symbol, Any},
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-    )::IMASDD.dd
-
-Add interferometer to IMAS structure using a Dict and compute the line integrated
-electron density if not present
-"""
-function add_interferometer!(
-    config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
-    overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-)::IMASDD.dd
-    # Check for duplicates
-    if length(ids.interferometer.channel) > 0
-        duplicate_indices = []
-        new_channels = Dict(
-            ch[:name] => ch[:identifier] for
-            ch ∈ config[:interferometer][:channel]
-        )
-        for (ii, ch) ∈ enumerate(ids.interferometer.channel)
-            if ch.name in keys(new_channels) ||
-               ch.identifier in values(new_channels)
-                append!(duplicate_indices, ii)
-            end
-        end
-        if overwrite
-            for ii ∈ reverse(duplicate_indices)
-                println(
-                    "Overwriting interferometer channel ",
-                    "$(ids.interferometer.channel[ii].name)...",
-                )
-                deleteat!(ids.interferometer.channel, ii)
-            end
-        else
-            if length(duplicate_indices) > 0
-                err_msg =
-                    "Duplicate interferometer channels found with " *
-                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
-                for ii ∈ duplicate_indices
-                    err_msg *=
-                        "$(ids.interferometer.channel[ii].identifier): " *
-                        "$(ids.interferometer.channel[ii].name)\n"
-                end
-                err_msg *= "Use overwrite=true to replace them."
-                throw(OverwriteAttemptError(err_msg))
-            end
-        end
-        config[:interferometer] =
-            mergewith(
-                append!,
-                IMASDD.imas2dict(ids.interferometer),
-                config[:interferometer],
-            )
-    end
-    IMASDD.dict2imas(config, ids; verbose=verbose)
-    compute_interferometer!(ids; rtol=rtol, n_e_gsi=n_e_gsi)
+    add_diagnostic!(config, :interferometer, ids; overwrite=overwrite, verbose=verbose)
+    compute_interferometer!(ids; kwargs...)
     return ids
 end
 
@@ -109,7 +37,9 @@ end
 
 Computed the line integrated electron density from the interferometer data present in
 IDS structure for all the chords. The computation is based on the edge profile data
-and core profile data present in the IDS structure.
+and core profile data present in the IDS structure. `rtol` is the relative tolerance
+for the numerical integration and `n_e_gsi` is the grid_subset_index that stores the
+electron density data in the edge profile.
 """
 function compute_interferometer!(
     @nospecialize(ids::IMASDD.dd);
