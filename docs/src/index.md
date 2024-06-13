@@ -41,6 +41,25 @@ julia> Pkg.instantiate()
 
 ## Synthetic Diagnostics
 
+### Bolometer
+
+Synthetic bolometer can be added using IMAS compatible `JSON` file that describes the metadata and the line of sight of chords with information on apertures and detectors. On computation, the bolomter uses radiation data in the IMAS IDS to numerically integrate total radiation falling on each detector taking into account the apertures in the path.
+
+```@docs
+add_bolometer!
+compute_bolometer!
+```
+
+Several useful geometrical functions are defined and used here.
+```@docs
+SynthDiag.FoV
+SynthDiag.get_FoV
+SynthDiag.get_line
+SynthDiag.get_angle
+SynthDiag.get_angle_bisector
+SynthDiag.compute_intersection
+```
+
 ### Interferometer
 
 Synthetic interferometer can be added using IMAS compatible `JSON` file that describes the metadata and the line of sight of chords. On computation, the interferometer uses edge profiles and core profiles data in the IMAS IDS to numerically integrate electron density along the line of sight and returns data in IMAS IDS interferometer object.
