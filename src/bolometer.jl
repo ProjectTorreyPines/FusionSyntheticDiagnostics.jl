@@ -13,22 +13,38 @@ export add_bolometer!, compute_bolometer!
 
 A structure to represent the field of view of a bolometer channel. It holds the half
 angle of the conical field of view and the transformation to go from the field of view
-frame to the R, Z, Phi frame. In the field of view frame, the z-axis is along the
+frame to the (X, Y, Z) frame. In the field of view frame, the z-axis is along the
 conical axis and the origin is the apex of the cone. The positive z direction is away
 from the detector and towards the plasma.
 
 Constructors:
 
-    FoV(ha::Float64, fov2RZP::AffineMap{T, U})
+    FoV(ha::Float64, fov2XYZ::AffineMap{T, U})
      where {T <: Rotation{3, Float64}, U <: SVector{3, Float64}}
 """
 mutable struct FoV
     var"ha"::Float64 # Half angle of conical field of view in radians
-    var"fov2RZP"::AffineMap{
+    var"fov2XYZ"::AffineMap{
         T,
         U,
     } where {T <: Rotation{3, Float64}, U <: SVector{3, Float64}}
 end
+
+"""
+Defining coordinate systems
+
+(X, Y, Z) coordinate system (XYZ) is Cartesian:
+X is the major radius axis for phi = 0
+Y is the major radius axis for phi = pi/2
+Z is the height axis.
+
+(R, Phi, Z) coordinate system (RPZ) is Cylindrical:
+R is the major radius
+Phi is the toroidal angle in radians
+Z is the height axis
+"""
+XYZ2RPZ = CylindricalFromCartesian()
+RPZ2XYZ = CartesianFromCylindrical()
 
 default_bolometer = "$(@__DIR__)/default_bolometer.json"
 
@@ -70,120 +86,29 @@ function compute_bolometer!(
     FoVs = Dict{String, FoV}()
     for ch ∈ ids.bolometer.channel
         # List of transformation to go from aperture frame to R, Z, Phi frame
-        ap2RZP = Array{LinearMap{RotMatrix3{Float64}}}(undef, length(ch.aperture))
+        ap2XYZ = Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}(
+            undef,
+            length(ch.aperture),
+        )
 
         # Add outline to apertures and detector if not present
         for (ii, ap) ∈ enumerate(ch.aperture)
-            if ap.geometry_type != 1
-                if ap.geometry_type == 2
-                    resize!(ap.outline.x1, circle_to_outline_nop)
-                    resize!(ap.outline.x2, circle_to_outline_nop)
-                    ap.outline.x1 = ap.radius .* cos.(range(0, 2π, c2o_nop))
-                    ap.outline.x2 = ap.radius .* sin.(range(0, 2π, c2o_nop))
-                    if IMASDD.ismissing(ap, :surface)
-                        ap.surface = π * ap.radius^2
-                    end
-                elseif ap.geometry_type == 3
-                    resize!(ap.outline.x1, 4)
-                    resize!(ap.outline.x2, 4)
-                    ap.outline.x1 = [
-                        -ap.x1_width / 2,
-                        -ap.x1_width / 2,
-                        ap.x1_width / 2,
-                        ap.x1_width / 2,
-                    ]
-                    ap.outline.x2 = [
-                        -ap.x2_width / 2,
-                        ap.x2_width / 2,
-                        ap.x2_width / 2,
-                        -ap.x2_width / 2,
-                    ]
-                    if IMASDD.ismissing(ap, :surface)
-                        ap.surface = ap.width * ap.height
-                    end
-                end
-            end
-            x1 = SVector{3, Float64}(
-                ap.x1_unit_vector.x,
-                ap.x1_unit_vector.y,
-                ap.x1_unit_vector.z,
-            )
-            x2 = SVector{3, Float64}(
-                ap.x2_unit_vector.x,
-                ap.x2_unit_vector.y,
-                ap.x2_unit_vector.z,
-            )
-            x3 = SVector{3, Float64}(
-                ap.x3_unit_vector.x,
-                ap.x3_unit_vector.y,
-                ap.x3_unit_vector.z,
-            )
-            ap2RZP[ii] = inv(LinearMap(RotMatrix3([x1; x2; x3])))
+            create_outline!(ap; c2o_nop=c2o_nop)
+            ap2XYZ[ii] = get_transform_to_XYZ(ap)
         end
+        create_outline!(ch.detector; c2o_nop=c2o_nop)
+        det2XYZ = get_transform_to_XYZ(ch.detector)
 
-        det = ch.detector
-        if det.geometry_type != 1
-            if det.geometry_type == 2
-                resize!(det.outline.x1, circle_to_outline_nop)
-                resize!(det.outline.x2, circle_to_outline_nop)
-                det.outline.x1 = det.radius .* cos.(range(0, 2π, c2o_nop))
-                det.outline.x2 = det.radius .* sin.(range(0, 2π, c2o_nop))
-                if IMASDD.ismissing(det, :surface)
-                    det.surface = π * det.radius^2
-                end
-            elseif det.geometry_type == 3
-                resize!(det.outline.x1, 4)
-                resize!(det.outline.x2, 4)
-                det.outline.x1 = [
-                    -det.x1_width / 2,
-                    -det.x1_width / 2,
-                    det.x1_width / 2,
-                    det.x1_width / 2,
-                ]
-                det.outline.x2 = [
-                    -det.x2_width / 2,
-                    det.x2_width / 2,
-                    det.x2_width / 2,
-                    -det.x2_width / 2,
-                ]
-                if IMASDD.ismissing(det, :surface)
-                    det.surface = det.width * det.height
-                end
-            end
-        end
-        x1 = SVector{3, Float64}(
-            det.x1_unit_vector.x,
-            det.x1_unit_vector.y,
-            det.x1_unit_vector.z,
-        )
-        x2 = SVector{3, Float64}(
-            det.x2_unit_vector.x,
-            det.x2_unit_vector.y,
-            det.x2_unit_vector.z,
-        )
-        x3 = SVector{3, Float64}(
-            det.x3_unit_vector.x,
-            det.x3_unit_vector.y,
-            det.x3_unit_vector.z,
-        )
-        # Transformation to go from detector frame to R, Z, Phi frame
-        det2RZP = inv(LinearMap(RotMatrix3([x1; x2; x3])))
-
-        # Transformation to go from aperture frame to detector frame
-        R_ap2det = Array{LinearMap{RotMatrix3{Float64}}}(undef, length(ch.aperture))
-        for (ii, R) ∈ enumerate(R_ap)
-            R_ap2det[ii] = inv(det2RZP) ∘ R
-        end
-
-        FoVs[ch.identifier] = get_FoV(ch, ap2RZP[end], det2RZP)
+        # Compute field of view for each channel
+        FoVs[ch.identifier] = get_FoV(ch, ap2XYZ[end], det2XYZ)
     end
 end
 
 """
     get_FoV(
         ch::IMASDD.bolometer_channel,
-        ap2RZP::LinearMap{RotMatrix3{Float64}},
-        det2RZP::LinearMap{RotMatrix3{Float64}},
+        ap2XYZ::LinearMap{RotMatrix3{Float64}},
+        det2XYZ::LinearMap{RotMatrix3{Float64}},
     )::FoV
 
 Assuming aperture and detector are arrays of points described in 3D space on same
@@ -197,12 +122,13 @@ returned.
 """
 function get_FoV(
     ch::IMASDD.bolometer__channel{T},
-    ap2RZP::LinearMap{RotMatrix3{Float64}},
-    det2RZP::LinearMap{RotMatrix3{Float64}},
+    ap2XYZ::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
+    det2XYZ::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
 )::FoV where {T <: Real}
     last_ap = ch.aperture[end]
     ap_nop = length(last_ap.outline.x1)
-    ap2det = inv(det2RZP) ∘ ap2RZP
+    ap2det = inv(det2XYZ) ∘ ap2XYZ
+    # Get the aperture vertices in detector frame
     ap = [
         ap2det(SVector(last_ap.outline.x1[ii], last_ap.outline.x2[ii], 0.0))
         for
@@ -214,13 +140,14 @@ function get_FoV(
         ii ∈ 1:det_nop
     ]
 
+    # Compute aperture and detector centroids, normals, and radii (enclosing circle)
     ap_c = mean(ap)
     det_c = mean(det)
-    ap_n = ap2det(SVector(0.0, 0.0, 1.0)) # get_plane_normal(ap[1], ap[2], ap[3])
-    det_n = SVector(0.0, 0.0, 1.0) # get_plane_normal(det[1], det[2], det[3])
-    ap_n = sign(dot(ap_n, det_n)) * ap_n
+    ap_n = ap2det(SVector(0.0, 0.0, 1.0)) # Aperture normal is z-axis in aperture frame
+    det_n = SVector(0.0, 0.0, 1.0) # Detector normal is z-axis in detector frame
     ap_r = maximum([norm(ap_p - ap_c) for ap_p ∈ ap])
     det_r = maximum([norm(det_p - det_c) for det_p ∈ det])
+    ap_n = sign(dot(ap_n, det_n)) * ap_n # Ensure ap. normal points along det. normal
 
     # Compute coordinate transform
     # First translate to form detector centroid as origin
@@ -239,7 +166,7 @@ function get_FoV(
     # Rotate aperture normals
     ap_tr_n = R1(ap_n)
 
-    # Now working on the projection to x-z plane by rotating aperture center to
+    # Now working on the projection to x-z plane by rotating aperture centre to
     # the x-z plane but keeping the normal the same
     # This is an approximation that slighlty increases the field of view
     R_ap_c_to_xz_axis = normalize(cross(ap_tr_c, SVector(0.0, 1.0, 0.0)))
@@ -290,7 +217,7 @@ function get_FoV(
     fov_axis = normalize(SVector(-fov_axis_eq[2], 0.0, fov_axis_eq[1]))
     fov_vertex = SVector(fov_vertex[1], 0.0, fov_vertex[2])
 
-    # Rotate the axis and vertex back the amount aperture center was rotated
+    # Rotate the axis and vertex back the amount aperture centre was rotated
     inv_R_ap_c_to_xz = inv(R_ap_c_to_xz)
     fov_axis = inv_R_ap_c_to_xz(fov_axis) * sign(fov_axis[3])
     fov_vertex = inv_R_ap_c_to_xz(fov_vertex)
@@ -309,11 +236,11 @@ function get_FoV(
     # Transformation to go from detector frame to field of view frame
     det2fov = R3 ∘ T2 ∘ R1_T1
 
-    # Transformation to go from field of view frame to R, Z, Phi frame
-    # composition of fov2det (which is inv(det2fov)) and then det2RZP
-    fov2RZP = det2RZP ∘ inv(det2fov)
+    # Transformation to go from field of view frame to (X, Y, Z) frame
+    # composition of fov2det (which is inv(det2fov)) and then det2XYZ
+    fov2XYZ = det2XYZ ∘ inv(det2fov)
 
-    return FoV(fov_ha, fov2RZP)
+    return FoV(fov_ha, fov2XYZ)
 end
 
 """
@@ -427,4 +354,241 @@ function compute_intersection(
         return nothing
     end
     return SVector(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+end
+
+function area_of_polygon(vertices::Vector{SVector{2, Float64}})::Float64
+    n = length(vertices)
+    # Shoelace formula
+    return 0.5 * sum(
+        [
+        vertices[ii][1] * vertices[mod1(ii + 1, n)][2] -
+        vertices[mod1(ii + 1, n)][1] * vertices[ii][2]
+        for
+        ii ∈ 1:n
+    ],
+    )
+end
+
+function area(
+    outline::Union{
+        IMASDD.bolometer__channel___detector__outline,
+        IMASDD.bolometer__channel___aperture___outline,
+    },
+)::Float64
+    return area_of_polygon(
+        [SVector(outline.x1[ii], outline.x2[ii]) for ii ∈ 1:length(outline.x1)],
+    )
+end
+
+function create_outline!(
+    det_or_ap::Union{
+        IMASDD.bolometer__channel___aperture,
+        IMASDD.bolometer__channel___detector,
+    };
+    c2o_nop::Int64=12,
+)
+    if det_or_ap.geometry_type == 1
+        if IMASDD.ismissing(ap, :surface)
+            det_or_ap.surface = area(det_or_ap.outline)
+        end
+    elseif det_or_ap.geometry_type == 2
+        det_or_ap.outline.x1 = det_or_ap.radius .* cos.(range(0, 2π, c2o_nop))
+        det_or_ap.outline.x2 = det_or_ap.radius .* sin.(range(0, 2π, c2o_nop))
+        if IMASDD.ismissing(det_or_ap, :surface)
+            det_or_ap.surface = π * det_or_ap.radius^2
+        end
+    elseif det_or_ap.geometry_type == 3
+        det_or_ap.outline.x1 = [
+            -det_or_ap.x1_width / 2,
+            -det_or_ap.x1_width / 2,
+            det_or_ap.x1_width / 2,
+            det_or_ap.x1_width / 2,
+        ]
+        det_or_ap.outline.x2 = [
+            -det_or_ap.x2_width / 2,
+            det_or_ap.x2_width / 2,
+            det_or_ap.x2_width / 2,
+            -det_or_ap.x2_width / 2,
+        ]
+        if IMASDD.ismissing(det_or_ap, :surface)
+            det_or_ap.surface = det_or_ap.x1_width * det_or_ap.x2_width
+        end
+    end
+end
+
+function get_transform_to_XYZ(
+    det_or_ap::Union{
+        IMASDD.bolometer__channel___aperture,
+        IMASDD.bolometer__channel___detector,
+    },
+)::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}
+    x1 = normalize(
+        SVector{3, Float64}(
+            det_or_ap.x1_unit_vector.x,
+            det_or_ap.x1_unit_vector.y,
+            det_or_ap.x1_unit_vector.z,
+        ),
+    )
+    x2 = normalize(
+        SVector{3, Float64}(
+            det_or_ap.x2_unit_vector.x,
+            det_or_ap.x2_unit_vector.y,
+            det_or_ap.x2_unit_vector.z,
+        ),
+    )
+    x3 = normalize(
+        SVector{3, Float64}(
+            det_or_ap.x3_unit_vector.x,
+            det_or_ap.x3_unit_vector.y,
+            det_or_ap.x3_unit_vector.z,
+        ),
+    )
+    origin = RPZ2XYZ(
+        Cylindrical(det_or_ap.centre.r, det_or_ap.centre.phi, det_or_ap.centre.z),
+    )
+    return Translation(origin) ∘ LinearMap(RotMatrix3([x1; x2; x3]))
+end
+
+function add_bolometer_detector!(
+    ch::IMASDD.bolometer__channel,
+    centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+    outline::Vector{SVector{2, Float64}},
+)
+    add_bolometer_det_or_ap_centre!(ch.detector, centre)
+    add_bolometer_det_or_ap_uv!(ch.detector, x1_uv, x2_uv, x3_uv)
+    ch.detector.geometry_type = 1
+    ch.detector.outline.x1 = [p[1] for p ∈ outline]
+    ch.detector.outline.x2 = [p[2] for p ∈ outline]
+    return ch.detector.surface = area(ch.detector.outline)
+end
+
+function add_bolometer_detector!(
+    ch::IMASDD.bolometer__channel,
+    centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+    radius::Float64,
+)
+    add_bolometer_det_or_ap_centre!(ch.detector, centre)
+    add_bolometer_det_or_ap_uv!(ch.detector, x1_uv, x2_uv, x3_uv)
+    ch.detector.geometry_type = 2
+    ch.detector.radius = radius
+    return ch.detector.surface = π * radius^2
+end
+
+function add_bolometer_detector!(
+    ch::IMASDD.bolometer__channel,
+    centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+    x1_width::Float64,
+    x2_width::Float64,
+)
+    add_bolometer_det_or_ap_centre!(ch.detector, centre)
+    add_bolometer_det_or_ap_uv!(ch.detector, x1_uv, x2_uv, x3_uv)
+    ch.detector.geometry_type = 3
+    ch.detector.x1_width = x1_width
+    ch.detector.x2_width = x2_width
+    return ch.detector.surface = x1_width * x2_width
+end
+
+function add_bolometer_aperture!(
+    ch::IMASDD.bolometer__channel,
+    centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+    outline::Vector{SVector{2, Float64}},
+)
+    resize!(ch.aperture, length(ch.aperture) + 1)
+    ap = ch.aperture[end]
+    add_bolometer_det_or_ap_centre!(ap, centre)
+    add_bolometer_det_or_ap_uv!(ap, x1_uv, x2_uv, x3_uv)
+    ap.geometry_type = 1
+    ap.outline.x1 = [p[1] for p ∈ outline]
+    ap.outline.x2 = [p[2] for p ∈ outline]
+    return ap.surface = area(ap.outline)
+end
+
+function add_bolometer_aperture!(
+    ch::IMASDD.bolometer__channel,
+    centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+    radius::Float64,
+)
+    resize!(ch.aperture, length(ch.aperture) + 1)
+    ap = ch.aperture[end]
+    add_bolometer_det_or_ap_centre!(ap, centre)
+    add_bolometer_det_or_ap_uv!(ap, x1_uv, x2_uv, x3_uv)
+    ap.geometry_type = 2
+    ap.radius = radius
+    return ap.surface = π * radius^2
+end
+
+function add_bolometer_aperture!(
+    ch::IMASDD.bolometer__channel,
+    centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+    x1_width::Float64,
+    x2_width::Float64,
+)
+    resize!(ch.aperture, length(ch.aperture) + 1)
+    ap = ch.aperture[end]
+    add_bolometer_det_or_ap_centre!(ap, centre)
+    add_bolometer_det_or_ap_uv!(ap, x1_uv, x2_uv, x3_uv)
+    ap.geometry_type = 3
+    ap.x1_width = x1_width
+    ap.x2_width = x2_width
+    return ap.surface = x1_width * x2_width
+end
+
+function add_bolometer_det_or_ap_centre!(
+    det_or_ap::Union{
+        IMASDD.bolometer__channel___detector,
+        IMASDD.bolometer__channel___aperture,
+    },
+    centre::Cylindrical{Float64, Float64},
+)
+    det_or_ap.centre.r = centre.r
+    det_or_ap.centre.phi = centre.θ
+    return det_or_ap.centre.z = centre.z
+end
+
+function add_bolometer_det_or_ap_centre!(
+    det_or_ap::Union{
+        IMASDD.bolometer__channel___detector,
+        IMASDD.bolometer__channel___aperture,
+    },
+    centre::SVector{3, Float64},
+)
+    return add_bolometer_det_or_ap_centre!(det_or_ap, XYZ2RPZ(centre))
+end
+
+function add_bolometer_det_or_ap_uv!(
+    det_or_ap::Union{
+        IMASDD.bolometer__channel___detector,
+        IMASDD.bolometer__channel___aperture,
+    },
+    x1_uv::SVector{3, Float64},
+    x2_uv::SVector{3, Float64},
+    x3_uv::SVector{3, Float64},
+)
+    det_or_ap.x1_unit_vector.x = x1_uv[1]
+    det_or_ap.x1_unit_vector.y = x1_uv[2]
+    det_or_ap.x1_unit_vector.z = x1_uv[3]
+    det_or_ap.x2_unit_vector.x = x2_uv[1]
+    det_or_ap.x2_unit_vector.y = x2_uv[2]
+    det_or_ap.x2_unit_vector.z = x2_uv[3]
+    det_or_ap.x3_unit_vector.x = x3_uv[1]
+    det_or_ap.x3_unit_vector.y = x3_uv[2]
+    return det_or_ap.x3_unit_vector.z = x3_uv[3]
 end
