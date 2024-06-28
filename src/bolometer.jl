@@ -84,6 +84,8 @@ function compute_bolometer!(
     c2o_nop::Int64=12,
 )
     FoVs = Dict{String, FoV}()
+    det2XYZs = Dict{String, AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}()
+    ap2XYZs = Dict{String, Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}}()
     for ch ∈ ids.bolometer.channel
         # List of transformation to go from aperture frame to R, Z, Phi frame
         ap2XYZ = Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}(
@@ -101,7 +103,10 @@ function compute_bolometer!(
 
         # Compute field of view for each channel
         FoVs[ch.identifier] = get_FoV(ch, ap2XYZ[end], det2XYZ)
+        det2XYZs[ch.identifier] = det2XYZ
+        ap2XYZs[ch.identifier] = ap2XYZ
     end
+    return FoVs, det2XYZs, ap2XYZs
 end
 
 """
@@ -359,13 +364,15 @@ end
 function area_of_polygon(vertices::Vector{SVector{2, Float64}})::Float64
     n = length(vertices)
     # Shoelace formula
-    return 0.5 * sum(
-        [
-        vertices[ii][1] * vertices[mod1(ii + 1, n)][2] -
-        vertices[mod1(ii + 1, n)][1] * vertices[ii][2]
-        for
-        ii ∈ 1:n
-    ],
+    return 0.5 * abs(
+        sum(
+            [
+            vertices[ii][1] * vertices[mod1(ii + 1, n)][2] -
+            vertices[mod1(ii + 1, n)][1] * vertices[ii][2]
+            for
+            ii ∈ 1:n
+        ],
+        ),
     )
 end
 
@@ -376,8 +383,130 @@ function area(
     },
 )::Float64
     return area_of_polygon(
-        [SVector(outline.x1[ii], outline.x2[ii]) for ii ∈ 1:length(outline.x1)],
+        [SVector(outline.x1[ii], outline.x2[ii]) for ii ∈ eachindex(outline.x1)],
     )
+end
+
+function project_3D_line_to_z0(
+    p1::SVector{3, Float64},
+    p2::SVector{3, Float64},
+)::SVector{2, Float64}
+    t = -p1[3] / (p2[3] - p1[3])
+    proj = p1 + t .* (p2 - p1)
+    return SVector(proj[1], proj[2])
+end
+
+"""
+    get_lit_sa(
+    source::SVector{3, Float64},
+    aps::IMASDD.IDSvector{IMASDD.bolometer__channel___aperture{Float64}},
+    det::IMASDD.bolometer__channel___detector,
+    XYZ2det::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
+    ap2XYZs::Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}},
+
+)::Vector{SVector{2, Float64}}
+
+Get illuminated solid angle from source point (in XYZ frame) on the detector through
+the array of apertures of a channel. The solid angle is calculated as ratio of
+illuminated area on the detector to square of distance from source to detector. The
+illuminated area is calculated by clipping the detector outline with the outlines that
+apertures make on the detector plane when projected from the source point.
+"""
+function get_lit_sa(
+    source::SVector{3, Float64},
+    ch::IMASDD.bolometer__channel,
+    XYZ2det::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
+    ap2XYZs::Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}},
+)::Float64
+    src = XYZ2det(source)
+    det_list = [
+        SVector(ch.detector.outline.x1[ii], ch.detector.outline.x2[ii]) for
+        ii ∈ eachindex(ch.detector.outline.x1)
+    ]
+    lit_region = deepcopy(det_list)
+    for (ap_ind, ap) ∈ enumerate(ch.aperture)
+        ap2det = XYZ2det ∘ ap2XYZs[ap_ind]
+        ap_list = [
+            ap2det(SVector(ap.outline.x1[ii], ap.outline.x2[ii], 0.0)) for
+            ii ∈ eachindex(ap.outline.x1)
+        ]
+        clip_list = [project_3D_line_to_z0(src, app) for app ∈ ap_list]
+        lit_region = clip(lit_region, clip_list)
+    end
+    # In detector frame, detector center is at origin
+    return area_of_polygon(lit_region) / norm(src)^2
+end
+
+"""
+    clip(
+        subject_list::Vector{SVector{2, Float64}},
+        clip_list::Vector{SVector{2, Float64}},
+    )::Vector{SVector{2, Float64}}
+
+Clip a list of vertices that form a polygon by a list of vertices that form a convex
+clipping ploygon. It is assumed the lists are ordered.
+"""
+function clip(
+    subject_list::Vector{SVector{2, Float64}},
+    clip_list::Vector{SVector{2, Float64}},
+)::Vector{SVector{2, Float64}}
+    N = length(clip_list)
+    clip_edges = [
+        get_line(clip_list[ii], clip_list[mod1(ii + 1, N)]) for
+        ii ∈ eachindex(clip_list)
+    ]
+    for ii ∈ eachindex(clip_edges)
+        if !right_of_edge(clip_list[mod1(ii + 2, N)], clip_edges[ii])
+            clip_edges[ii] = -1.0 .* clip_edges[ii]
+        end
+    end
+    return clip(subject_list, clip_edges)
+end
+
+"""
+    clip(
+        subject_list::Vector{SVector{2, Float64}},
+        clip_list::Vector{SVector{3, Float64}},
+    )::Vector{SVector{2, Float64}}
+
+Clip a list of vertices that form a polygon by a list of edges that form a convex
+clipping ploygon. It is assumed the lists are ordered and the clip_list edges are such
+that all vertices of clipping polygon are on the right side of the edges.
+"""
+function clip(
+    subject_list::Vector{SVector{2, Float64}},
+    clip_list::Vector{SVector{3, Float64}},
+)::Vector{SVector{2, Float64}}
+    out_list = deepcopy(subject_list)
+    for clip_edge ∈ clip_list
+        inp_list = deepcopy(out_list)
+        N = length(inp_list)
+        out_list = SVector{2, Float64}[]
+        for ii ∈ eachindex(inp_list)
+            current_point = inp_list[ii]
+            prev_point = inp_list[mod1(ii - 1, N)]
+            # Compute intersection of finite line segment with infinite clip edge
+            int_point = compute_intersection(prev_point, current_point, clip_edge)
+            if !isnothing(int_point)
+                push!(out_list, int_point)
+            end
+            if right_of_edge(current_point, clip_edge) > 0
+                push!(out_list, current_point)
+            end
+        end
+    end
+    return out_list
+end
+
+"""
+    right_of_edge(point::SVector{2,Float64}, edge::SVector{3,Float64})::Bool
+
+Check if a point is on the right side of an edge.
+"""
+function right_of_edge(point::SVector{2, Float64}, edge::SVector{3, Float64})::Bool
+    x, y = point
+    a, b, c = edge
+    return a * x + b * y + c > 0
 end
 
 function create_outline!(
@@ -392,8 +521,9 @@ function create_outline!(
             det_or_ap.surface = area(det_or_ap.outline)
         end
     elseif det_or_ap.geometry_type == 2
-        det_or_ap.outline.x1 = det_or_ap.radius .* cos.(range(0, 2π, c2o_nop))
-        det_or_ap.outline.x2 = det_or_ap.radius .* sin.(range(0, 2π, c2o_nop))
+        angles = range(0, 2π; length=c2o_nop)[1:end-1]
+        det_or_ap.outline.x1 = det_or_ap.radius .* cos.(angles)
+        det_or_ap.outline.x2 = det_or_ap.radius .* sin.(angles)
         if IMASDD.ismissing(det_or_ap, :surface)
             det_or_ap.surface = π * det_or_ap.radius^2
         end
