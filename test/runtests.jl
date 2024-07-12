@@ -1,6 +1,6 @@
 using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
     compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
-    langmuir_probe_current
+    langmuir_probe_current, magic_nesep
 using IMASDD: json2imas
 using Test
 using Printf
@@ -23,6 +23,9 @@ function parse_commandline()
             :action => :store_true),
         ["--gas_injection"],
         Dict(:help => "Test only gas injection",
+            :action => :store_true),
+        ["--magic"],
+        Dict(:help => "Test only magic diagnostics",
             :action => :store_true),
     )
     args = ArgParse.parse_args(localARGS, s)
@@ -335,5 +338,16 @@ if args["gas_injection"]
             "$(@__DIR__)/gas_injection_start_stop.png",
         )
         @test true
+    end
+end
+
+if args["magic"]
+    @testset "magic_diagnostics" begin
+        ids = json2imas(
+            "$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json",
+        )
+        nt = length(ids.edge_profiles.ggd)
+        nesep = magic_nesep(ids; cell_grid_subset=-5)
+        @test length(nesep) == nt
     end
 end
