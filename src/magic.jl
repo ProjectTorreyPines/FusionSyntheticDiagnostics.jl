@@ -59,18 +59,13 @@ function magic_nesep(
     fix_ep_grid_ggd_idx = length(dd.edge_profiles.grid_ggd) == 1
     grid_ggd = dd.edge_profiles.grid_ggd[grid_ggd_idx]
     space = grid_ggd.space[space_number]
-    cell_sub = get_grid_subset(grid_ggd, cell_grid_subset)
 
-    # Find the intersection of the outboard midplane slice with the separatrix
-    midplane_sub = get_grid_subset(grid_ggd, midplane_grid_subset)
-    separatrix_sub = get_grid_subset(grid_ggd, separatrix_grid_subset)
-    intersect_element = subset_do(
-        intersect, midplane_sub.element, separatrix_sub.element; space=space,
-        use_nodes=true)
-    intersect_index = intersect_element[1].object[1].index
-    intersect_point = space.objects_per_dimension[1].object[intersect_index].geometry
-    rintersect = intersect_point[1]
-    zintersect = intersect_point[2]
+    rintersect, zintersect = find_OMP_RZ(
+        grid_ggd;
+        space_number=space_number,
+        midplane_grid_subset=midplane_grid_subset,
+        separatrix_grid_subset=separatrix_grid_subset,
+    )
 
     tps_mats = get_TPS_mats(grid_ggd, cell_grid_subset)
 

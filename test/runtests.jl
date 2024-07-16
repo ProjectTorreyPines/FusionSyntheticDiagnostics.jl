@@ -1,7 +1,9 @@
 using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
     compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
-    langmuir_probe_current, magic_nesep
-using IMASDD: json2imas
+    langmuir_probe_current, magic_nesep,
+    calc_loss_power, calc_conducted_loss_power, calc_q_cyl, calc_heat_flux_width,
+    find_OMP_RZ, read_B_theta_OMP
+using IMASDD: json2imas, gradient
 using Test
 using Printf
 using Plots
@@ -26,6 +28,9 @@ function parse_commandline()
             :action => :store_true),
         ["--magic"],
         Dict(:help => "Test only magic diagnostics",
+            :action => :store_true),
+        ["--derived"],
+        Dict(:help => "Test only derived quantities and calculations",
             :action => :store_true),
     )
     args = ArgParse.parse_args(localARGS, s)
@@ -349,5 +354,120 @@ if args["magic"]
         nt = length(ids.edge_profiles.ggd)
         nesep = magic_nesep(ids; cell_grid_subset=-5)
         @test length(nesep) == nt
+    end
+end
+
+if args["derived"]
+    @testset "derived_quantities_simple" begin
+        # Test data for power calculations
+        time = [i for i ∈ 0:0.01:10.0]
+        Wflat = 2.5e6  # J
+        tau = 0.325  # s
+        ramp_up_end = 1.15
+        ramp_down_start = 9.0
+        W = (time ./ ramp_up_end) .* Wflat
+        W[time.>ramp_up_end] .= Wflat
+        sel = time .> ramp_down_start
+        W[sel] .= Wflat * (1 .- (time[sel] .- ramp_down_start))
+        sel = (time .> 5.5) .& (time .< 6.8)
+        W[sel] .+= Wflat .* 0.12 .* sin.(time[sel] .* 2 .* π ./ 0.5)
+        dWdt = gradient(time, W)
+        test_time = 0.9
+        test_dWdt = (dWdt[abs.(time .- test_time).<0.011])[1]
+
+        Pscale = Wflat / tau
+        P_rad_core = Pscale * 0.32
+        P_input = Pscale + P_rad_core
+        P_NBI = P_input * 0.5
+        P_ECH = P_input * 0.5
+        P_OHM = P_input - (P_NBI + P_ECH)
+
+        nt = length(time)
+
+        P_SOL = calc_loss_power(test_dWdt, P_rad_core, P_OHM; P_NBI=P_NBI, P_ECH=P_ECH)
+        @test P_SOL > 0
+
+        tau_arr = 0.1 .+ time .* 0.0
+        tau_arr[W.>1e6] .= tau
+        Pscale_arr = W ./ tau_arr
+        P_rad_core_arr = Pscale_arr .* 0.32
+        P_input_arr = Pscale_arr .+ P_rad_core_arr
+        P_NBI_arr = P_input_arr .* 0.5
+        P_ECH_arr = P_input_arr .* 0.4
+        P_OHM_arr = P_input_arr .- (P_NBI_arr .+ P_ECH_arr)
+
+        P_SOL_arr = calc_loss_power(
+            time,
+            W,
+            P_rad_core_arr,
+            P_OHM_arr;
+            P_NBI=P_NBI_arr,
+            P_ECH=P_ECH_arr,
+        )
+        @test length(P_SOL_arr) == nt
+
+        P_cond = calc_conducted_loss_power(test_dWdt, P_OHM; P_NBI=P_NBI, P_ECH=P_ECH)
+        @test P_cond > 0
+
+        P_cond_arr = calc_conducted_loss_power(
+            time,
+            W,
+            P_OHM_arr;
+            P_NBI=P_NBI_arr,
+            P_ECH=P_ECH_arr,
+        )
+        @test length(P_cond_arr) == nt
+
+        # Test data for qcyl
+        B_ϕ_axis = -2.07  # T
+        Iₚ = 1.1e6  # A
+        aₘᵢₙₒᵣ = 0.56  # m
+        R_geo = 1.675  # m
+        κ = 1.81  # unitless
+        q_cyl = calc_q_cyl(B_ϕ_axis, Iₚ, aₘᵢₙₒᵣ, R_geo, κ)
+        println(q_cyl)
+        @test q_cyl != 0
+
+        λq1 = calc_heat_flux_width(B_ϕ_axis, P_SOL * 1e-6, R_geo, aₘᵢₙₒᵣ, κ, Iₚ)  # mm
+        λq2 = calc_heat_flux_width(B_ϕ_axis, P_SOL * 1e-6, R_geo, q_cyl)  # mm
+        @test λq1 == λq2
+
+        B_θ_OMP = -0.2545  # T
+        λq3 = calc_heat_flux_width(B_θ_OMP)  # mm
+        @test λq3 > 0
+    end
+    @testset "Derived quantities from DD" begin
+        ids = json2imas(
+            "$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json",
+        )
+        R_OMP1, Z_OMP1 = find_OMP_RZ(ids)
+        R_OMP, Z_OMP = find_OMP_RZ(ids.edge_profiles.grid_ggd[1])
+        @test R_OMP > 0
+        @test abs(Z_OMP) < R_OMP
+        @test R_OMP1 == R_OMP
+        @test Z_OMP1 == Z_OMP
+
+        ids = json2imas("$(@__DIR__)/../samples/sd_input_data.json")
+        B_θ_OMP = read_B_theta_OMP(
+            ids;
+            grid_ggds=ids.edge_profiles.grid_ggd,
+            cell_grid_subset=-5,
+        )
+        @test length(B_θ_OMP) == length(ids.equilibrium.time_slice)
+
+        P_SOL = calc_loss_power(ids)
+        nt = length(ids.summary.time)
+        @test length(P_SOL) == nt
+
+        λq1 = calc_heat_flux_width(ids; version=1)
+        λq2 = calc_heat_flux_width(ids; version=2)
+        @test length(λq1) == nt
+        @test length(λq2) == nt
+
+        B_θ_OMP_no_ggd = zeros(length(ids.equilibrium.time_slice))
+        for time_idx in 1:length(ids.equilibrium.time_slice)
+            B_θ_OMP_no_ggd[time_idx] = read_B_theta_OMP_no_ggd(ids, time_idx=time_idx)
+        end
+        println(B_θ_OMP_no_ggd)
     end
 end
