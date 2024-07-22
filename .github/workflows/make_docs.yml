@@ -1,47 +1,20 @@
 name: Make Docs
 on:
-  pull_request:
-    branches: ["master", "dev"]
-    paths:
-      - '.github/workflows/make_docs.yml'
-      - 'src/**'
-      - 'docs/**'
   push:
-    branches:
-      - master
-      - dev
-      - docs
+    branches: ["master", "reuse_ci"]
     paths:
       - '.github/workflows/make_docs.yml'
       - 'src/**'
       - 'docs/**'
     tags: '*'
+  pull_request:
+    branches: ["master"]
+    paths:
+      - '.github/workflows/make_docs.yml'
+      - 'src/**'
+      - 'docs/**'
   workflow_dispatch:
     
 jobs:
   make_docs:
-    permissions:
-      contents: write
-      statuses: write
-    name: Documentation
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        julia-version: [1.x]
-        julia-arch: [x64]
-        os: [ubuntu-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@latest
-      - uses: julia-actions/cache@v1
-      - name: "Add the FuseRegistry via Git"
-        run: |
-          julia --project=docs/ -e 'using Pkg; Pkg.Registry.add(RegistrySpec(url="https://github.com/ProjectTorreyPines/FuseRegistry.jl.git")); Pkg.Registry.add("General")'
-      - name: Install dependencies
-        run: |
-          julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
-      - name: Build and deploy
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-        run: julia --project=docs/ docs/make.jl
+    uses: ProjectTorreyPines/GitHubActionsWorkflows/.github/workflows/make_docs.yml@master
