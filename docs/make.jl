@@ -12,6 +12,6 @@ deploydocs(;
     repo="github.com/ProjectTorreyPines/SynthDiag.jl.git",
     target="build",
     branch="gh-pages",
-    devbranch="dev",
+    devbranch="master",
     versions=["stable" => "v^", "v#.#"],
 )
