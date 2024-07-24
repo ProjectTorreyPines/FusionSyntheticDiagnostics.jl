@@ -16,11 +16,11 @@ export magic_nesep
 """
     magic_nesep(
         dd::IMASDD.dd;
-        grid_ggd_idx::Int64=1,
-        space_number::Int64=1,
-        cell_grid_subset::Int64=5,
-        midplane_grid_subset::Int64=11,
-        separatrix_grid_subset::Int64=16,
+        grid_ggd_idx::Int=1,
+        space_number::Int=1,
+        cell_grid_subset::Int=5,
+        midplane_grid_subset::Int=11,
+        separatrix_grid_subset::Int=16,
     )::Array{Float64}
 
 Returns the value of electron density at the outboard midplane as a function of time.
@@ -45,11 +45,11 @@ the array will only have one element but it will still be an array.
 """
 function magic_nesep(
     dd::IMASDD.dd;
-    grid_ggd_idx::Int64=1,
-    space_number::Int64=1,
-    cell_grid_subset::Int64=5,
-    midplane_grid_subset::Int64=11,
-    separatrix_grid_subset::Int64=16,
+    grid_ggd_idx::Int=1,
+    space_number::Int=1,
+    cell_grid_subset::Int=5,
+    midplane_grid_subset::Int=11,
+    separatrix_grid_subset::Int=16,
 )::Array{Float64}
     # Form empty output array
     nslices = length(dd.edge_profiles.ggd)

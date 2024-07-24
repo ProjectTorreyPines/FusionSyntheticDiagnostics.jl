@@ -15,10 +15,10 @@ export get_powr_from_dd,
 
 """
     function find_OMP_RZ(dd::IMASDD.dd;
-        grid_ggd_idx::Int64=1,
-        space_number::Int64=1,
-        midplane_grid_subset::Int64=11,
-        separatrix_grid_subset::Int64=16,
+        grid_ggd_idx::Int=1,
+        space_number::Int=1,
+        midplane_grid_subset::Int=11,
+        separatrix_grid_subset::Int=16,
     )::Tuple
 
 Reads poloidal magnetic field at the outer midplane separatrix.
@@ -31,10 +31,10 @@ Reads poloidal magnetic field at the outer midplane separatrix.
   - separatrix_grid_subset: index of the subset that contains the 1D separatrix
 """
 function find_OMP_RZ(dd::IMASDD.dd;
-    grid_ggd_idx::Int64=1,
-    space_number::Int64=1,
-    midplane_grid_subset::Int64=11,
-    separatrix_grid_subset::Int64=16,
+    grid_ggd_idx::Int=1,
+    space_number::Int=1,
+    midplane_grid_subset::Int=11,
+    separatrix_grid_subset::Int=16,
 )::Tuple
     grid_ggd = dd.edge_profiles.grid_ggd[grid_ggd_idx]
     return find_OMP_RZ(grid_ggd;
@@ -46,9 +46,9 @@ end
 
 """
     function find_OMP_RZ(grid_ggd::IMASDD.edge_profiles__grid_ggd{Float64};
-        space_number::Int64=1,
-        midplane_grid_subset::Int64=11,
-        separatrix_grid_subset::Int64=16,
+        space_number::Int=1,
+        midplane_grid_subset::Int=11,
+        separatrix_grid_subset::Int=16,
     )::Tuple
 
 Reads poloidal magnetic field at the outer midplane separatrix.
@@ -60,9 +60,9 @@ Reads poloidal magnetic field at the outer midplane separatrix.
   - separatrix_grid_subset: index of the subset that contains the 1D separatrix
 """
 function find_OMP_RZ(grid_ggd::IMASDD.edge_profiles__grid_ggd{Float64};
-    space_number::Int64=1,
-    midplane_grid_subset::Int64=11,
-    separatrix_grid_subset::Int64=16,
+    space_number::Int=1,
+    midplane_grid_subset::Int=11,
+    separatrix_grid_subset::Int=16,
 )::Tuple
     space = grid_ggd.space[space_number]
     midplane_sub = get_grid_subset(grid_ggd, midplane_grid_subset)
@@ -79,12 +79,12 @@ end
 
 """
     read_B_theta_OMP(dd::IMASDD.dd;
-        grid_ggd_idx::Int64=1,
+        grid_ggd_idx::Int=1,
         grid_ggds=nothing,
-        space_number::Int64=1,
-        cell_grid_subset::Int64=5,
-        midplane_grid_subset::Int64=11,
-        separatrix_grid_subset::Int64=16,
+        space_number::Int=1,
+        cell_grid_subset::Int=5,
+        midplane_grid_subset::Int=11,
+        separatrix_grid_subset::Int=16,
     )::Array{Float64}
 
 Reads poloidal magnetic field at the outer midplane separatrix.
@@ -103,12 +103,12 @@ Reads poloidal magnetic field at the outer midplane separatrix.
   - separatrix_grid_subset: index of the subset that contains the 1D separatrix
 """
 function read_B_theta_OMP(dd::IMASDD.dd;
-    grid_ggd_idx::Int64=1,
+    grid_ggd_idx::Int=1,
     grid_ggds=nothing,
-    space_number::Int64=1,
-    cell_grid_subset::Int64=5,
-    midplane_grid_subset::Int64=11,
-    separatrix_grid_subset::Int64=16,
+    space_number::Int=1,
+    cell_grid_subset::Int=5,
+    midplane_grid_subset::Int=11,
+    separatrix_grid_subset::Int=16,
 )::Array{Float64}
     # Form empty output array
     nslices = length(dd.equilibrium.time_slice)
@@ -167,12 +167,12 @@ function read_B_theta_OMP(dd::IMASDD.dd;
 end
 
 """
-    function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int64=1)
+    function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int=1)
 
 Uses flux map in equilibrium (which is normally on a rectangular grid) to get the
 magnetic field at the midplane
 """
-function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int64=1)
+function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int=1)
 
     # r0 = dd.summary.global_quantities.r0.value
     # b0 = dd.summary.global_quantities.b0.value[time_idx]
@@ -229,14 +229,14 @@ end
 
 # """
 #     function mag_field_from_equil_to_ggd!(
-#         dd::IMASDD.dd; time_idx::Int64=1, grid_ggd_source=nothing
+#         dd::IMASDD.dd; time_idx::Int=1, grid_ggd_source=nothing
 #     )
 
 # Uses flux map in equilibrium (which is normally on a rectangular grid) along with a 
 # grid_ggd definition instance to define magnetic field components on the ggd mesh.
 # """
 # function mag_field_from_equil_to_ggd!(
-#     dd::IMASDD.dd; time_idx::Int64=1, grid_ggd_source=nothing,
+#     dd::IMASDD.dd; time_idx::Int=1, grid_ggd_source=nothing,
 # )
 #     if grid_ggd_source == nothing
 #         grid_ggd_source = dd.edge_profiles.grid_ggd[1]
@@ -284,7 +284,7 @@ end
 
 """
     set_default_power_arrays(
-        nt::Int64;
+        nt::Int;
         P_NBI=nothing,
         P_ECH=nothing,
         P_ICH=nothing,
@@ -297,7 +297,7 @@ Utility for setting up zero-filled arrays of the same length to cover power valu
 that weren't provided. Intended for internal use.
 """
 function set_default_power_arrays(
-    nt::Int64;
+    nt::Int;
     P_NBI=nothing,
     P_ECH=nothing,
     P_ICH=nothing,
@@ -565,7 +565,7 @@ function calc_q_cyl(
 end
 
 """
-    calc_heat_flux_width(dd::IMASDD.dd; version::Int64=1)
+    calc_heat_flux_width(dd::IMASDD.dd; version::Int=1)
 
 Calculates heat flux width from a scaling law. Different regressions are available
 by selecting different versions of the scaling law.
@@ -575,7 +575,7 @@ top row of table 6 from [Eich 2013 NF]
 Version 2 is a simple constant times the poloidal field at the outboard midplane
 from regression #14 in table 3 of [Eich 2013 NF]
 """
-function calc_heat_flux_width(dd::IMASDD.dd; version::Int64=1)::Array{Float64}
+function calc_heat_flux_width(dd::IMASDD.dd; version::Int=1)::Array{Float64}
     if version == 1
         B_ϕ_axis =
             dd.equilibrium.time_slice[:].global_quantities.magnetic_axis.b_field_tor

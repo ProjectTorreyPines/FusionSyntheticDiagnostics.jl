@@ -372,13 +372,13 @@ end
 lp_data_types = Union{get_types_with(IMASDD.langmuir_probes, :data)...}
 
 """
-    init_data!(q::lp_data_types, nt::Int64)
+    init_data!(q::lp_data_types, nt::Int)
 
 Initialize langmuir probe data field for a measurement length of nt
 """
-function init_data!(q::lp_data_types, nt::Int64)
+function init_data!(q::lp_data_types, nt::Int)
     q.data = zeros(Float64, nt)
-    q.validity_timed = zeros(Int64, nt)
+    q.validity_timed = zeros(Int, nt)
     return q.validity = 0
 end
 
@@ -389,7 +389,7 @@ end
             IMASDD.langmuir_probes__reciprocating___plunge,
             IMASDD.langmuir_probes__reciprocating___plunge___collector,
         },
-        nt::Int64,
+        nt::Int,
     )
 
 Initialize each data field in an embedded langmuir probe.
@@ -403,7 +403,7 @@ function init_data!(
         IMASDD.langmuir_probes__reciprocating___plunge,
         IMASDD.langmuir_probes__reciprocating___plunge___collector,
     },
-    nt::Int64,
+    nt::Int,
 )
     # make sure to initialize time before any other field
     for f ∈ [:time; collect(fieldnames(typeof(q)))]
@@ -453,11 +453,11 @@ function init_data!(
 end
 
 """
-    init_data!(q::IMASDD.langmuir_probes__reciprocating, nt::Int64)
+    init_data!(q::IMASDD.langmuir_probes__reciprocating, nt::Int)
 
 Initialize each plunge in a reciprocating probe with nt length zeros.
 """
-init_data!(q::IMASDD.langmuir_probes__reciprocating, nt::Int64) =
+init_data!(q::IMASDD.langmuir_probes__reciprocating, nt::Int) =
     for p ∈ q.plunge
         init_data!(p, nt)
     end
