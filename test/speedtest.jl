@@ -1,7 +1,7 @@
 using SynthDiag: add_interferometer!, add_langmuir_probes!, Noise,
     OverwriteAttemptError, add_gas_injection!, compute_gas_injection,
     get_gas_injection_response
-using SynthDiag.IMASDD: json2imas, dd
+using SynthDiag.IMAS: json2imas, dd
 using DelimitedFiles: readdlm
 
 println("-----------------------------------------------------------------------------")

@@ -1,6 +1,6 @@
 module SynthDiag
 
-using IMASDD: IMASDD
+using IMAS: IMAS
 
 include("$(@__DIR__)/noise.jl")
 
