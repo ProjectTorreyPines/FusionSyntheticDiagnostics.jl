@@ -2,7 +2,7 @@ using SynthDiag: IMAS, add_interferometer!, add_langmuir_probes!, add_gas_inject
     compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current, magic_nesep,
     calc_loss_power, calc_conducted_loss_power, calc_q_cyl, calc_heat_flux_width,
-    find_OMP_RZ, read_B_theta_OMP
+    find_OMP_RZ, read_B_theta_OMP, summarize_flux_surfaces!, read_B_theta_OMP_no_ggd
 using IMAS: json2imas, gradient
 using Test
 using Printf
@@ -455,6 +455,30 @@ if args["derived"]
         )
         @test length(B_θ_OMP) == length(ids.equilibrium.time_slice)
 
+        nt = length(ids.equilibrium.time_slice)
+        # ////////// TEMPORARY: this should go into the sample file later
+        for eqt ∈ ids.equilibrium.time_slice
+            p2 = eqt.profiles_2d[1]
+            p2.grid_type.index = 1  # 1 = rectangular, such as dim1 = R, dim2 = Z
+            p2.grid_type.name = "R-Z grid for flux map"
+            p2.grid_type.description = (
+                "A recntangular grid of points in R,Z on which poloidal " *
+                "magnetic flux psi is defined. The grid's dim1 is R, dim2 is Z."
+            )
+        end
+        ids.summary.global_quantities.power_ohm.value = zeros(nt) .+ 0.457
+        ids.summary.heating_current_drive.power_nbi.value = zeros(nt) .+ 1.56782
+        ids.summary.heating_current_drive.power_ec.value = zeros(nt) .+ 2.8
+        ids.summary.heating_current_drive.power_ic.value = zeros(nt)
+        ids.summary.heating_current_drive.power_lh.value = zeros(nt)
+        ids.summary.heating_current_drive.power_additional.value = zeros(nt)
+        ids.summary.boundary.geometric_axis_r.value = zeros(nt) .+ 6.285
+        ids.summary.fusion.power.value = zeros(nt)
+        # ///////////// END TEMPORARY data that is being added to sample until it can be updated
+        IMAS.flux_surfaces(ids.equilibrium)  # provides volume and stuff
+        summarize_flux_surfaces!(ids)
+        ids.summary.global_quantities.power_radiated_inside_lcfs.value = zeros(nt)  # This is needed but won't be immediately available in the sample
+
         P_SOL = calc_loss_power(ids)
         nt = length(ids.summary.time)
         @test length(P_SOL) == nt
@@ -465,8 +489,8 @@ if args["derived"]
         @test length(λq2) == nt
 
         B_θ_OMP_no_ggd = zeros(length(ids.equilibrium.time_slice))
-        for time_idx in 1:length(ids.equilibrium.time_slice)
-            B_θ_OMP_no_ggd[time_idx] = read_B_theta_OMP_no_ggd(ids, time_idx=time_idx)
+        for time_idx ∈ 1:length(ids.equilibrium.time_slice)
+            B_θ_OMP_no_ggd[time_idx] = read_B_theta_OMP_no_ggd(ids; time_idx=time_idx)
         end
         println(B_θ_OMP_no_ggd)
     end

@@ -11,7 +11,7 @@ References
 
 export get_powr_from_dd,
     calc_conducted_loss_power, calc_loss_power, calc_heat_flux_width, calc_q_cyl,
-    find_OMP_RZ, read_B_theta_OMP
+    find_OMP_RZ, read_B_theta_OMP, summarize_flux_surfaces!, read_B_theta_OMP_no_ggd
 
 """
     function find_OMP_RZ(dd::IMAS.dd;
@@ -115,7 +115,7 @@ function read_B_theta_OMP(dd::IMAS.dd;
     if nslices == 0
         error(
             "No slices in dd.equilibrium.time_slice. ",
-            "Cannot read Btheta from empty equilibrium data."
+            "Cannot read Btheta from empty equilibrium data.",
         )
     end
     B_θ_OMP = Array{Float64}(undef, nslices)
@@ -139,14 +139,20 @@ function read_B_theta_OMP(dd::IMAS.dd;
 
     for it ∈ 1:nslices
         if length(dd.equilibrium.time_slice[it].ggd) < 1
-            B_θ_OMP[it] = read_B_theta_OMP_no_ggd(dd, time_idx=it)
+            B_θ_OMP[it] = read_B_theta_OMP_no_ggd(dd; time_idx=it)
             # error("Equilibrium time slice #$it has no GGD data; cannot proceed.")
         else
             ggd = dd.equilibrium.time_slice[it].ggd[1]
 
             bz = interp(
                 ggd.b_field_z,
-                update_TPS_mats(it, fix_ep_grid_ggd_idx, dd, cell_grid_subset, tps_mats),
+                update_TPS_mats(
+                    it,
+                    fix_ep_grid_ggd_idx,
+                    dd,
+                    cell_grid_subset,
+                    tps_mats,
+                ),
                 cell_grid_subset,
             )(
                 rintersect,
@@ -154,7 +160,13 @@ function read_B_theta_OMP(dd::IMAS.dd;
             )
             br = interp(
                 ggd.b_field_r,
-                update_TPS_mats(it, fix_ep_grid_ggd_idx, dd, cell_grid_subset, tps_mats),
+                update_TPS_mats(
+                    it,
+                    fix_ep_grid_ggd_idx,
+                    dd,
+                    cell_grid_subset,
+                    tps_mats,
+                ),
                 cell_grid_subset,
             )(
                 rintersect,
@@ -188,7 +200,6 @@ function read_B_theta_OMP_no_ggd(dd::IMAS.dd; time_idx::Int=1)
     z = p2.grid.dim2
 
     psin = (psirz .- psia) ./ (psib .- psia)
-    
 
     dpsidr, dpsidz = IMAS.gradient(r, z, psirz)
     br = -dpsidz ./ r
@@ -198,31 +209,31 @@ function read_B_theta_OMP_no_ggd(dd::IMAS.dd; time_idx::Int=1)
     # find closest row to zmaxis
     dz = abs.(z .- zmaxis)
     i1 = argmin(dz)
-    dz2 = dz[dz .!= dz[i1]]
+    dz2 = dz[dz.!=dz[i1]]
     i2 = argmin(abs.(dz .- dz2[argmin(dz2)]))
     wi2 = (z[i1] - zmaxis) / (z[i1] - z[i2])
     wi1 = (zmaxis - z[i2]) / (z[i1] - z[i2])
     psin_omp = psin[:, i1] .* wi1 .+ psin[:, i2] .* wi2
     dp = abs.(psin_omp .- 1)
     j1 = argmin(dp)
-    dp2 = dp[dp .!= dp[j1]]
+    dp2 = dp[dp.!=dp[j1]]
     j2 = argmin(abs.(dp .- dp2[argmin(dp2)]))
     wj2 = (psin_omp[j1] - 1) / (psin_omp[j1] - psin_omp[j2])
     wj1 = (1 - psin_omp[j2]) / (psin_omp[j1] - psin_omp[j2])
 
     br_omp = (
-        br[i1, j1] * wi1 * wj1 + 
-        br[i2, j1] * wi2 * wj1 + 
-        br[i1, j2] * wi1 * wj2 + 
+        br[i1, j1] * wi1 * wj1 +
+        br[i2, j1] * wi2 * wj1 +
+        br[i1, j2] * wi1 * wj2 +
         br[i2, j2] * wi2 * wj2
     )
     bz_omp = (
-        bz[i1, j1] * wi1 * wj1 + 
-        bz[i2, j1] * wi2 * wj1 + 
-        bz[i1, j2] * wi1 * wj2 + 
+        bz[i1, j1] * wi1 * wj1 +
+        bz[i2, j1] * wi2 * wj1 +
+        bz[i1, j2] * wi1 * wj2 +
         bz[i2, j2] * wi2 * wj2
     )
-    
+
     B_θ_OMP = sqrt(br_omp^2 + bz_omp^2) * sign(bz_omp)
     return B_θ_OMP
 end
@@ -264,21 +275,35 @@ end
 # end
 
 """
+    function summarize_flux_surfaces!(dd::IMAS.dd)
+
+Copies key magnetic equilibrium data from the equilibrium ids to the summary ids.
+"""
+function summarize_flux_surfaces!(dd::IMAS.dd)
+    # Should be moved to IMAS expressions
+    dd.summary.boundary.minor_radius.value =
+        [eqt.boundary.minor_radius for eqt ∈ dd.equilibrium.time_slice]
+    return dd.summary.boundary.elongation.value =
+        [eqt.boundary.elongation for eqt ∈ dd.equilibrium.time_slice]
+end
+
+"""
     get_power_from_dd(dd::IMAS.dd)
 
 Utility for extracting power values from the data dictionary. Intended for internal use.
 """
 function get_power_from_dd(dd::IMAS.dd)
     time = dd.summary.time
-    W = dd.summary.global_quantities.energy_mhd.value
+    # W = dd.summary.global_quantities.energy_mhd.value
+    W = [eqt.global_quantities.energy_mhd for eqt ∈ dd.equilibrium.time_slice]
     P_rad_core = dd.summary.global_quantities.power_radiated_inside_lcfs.value
     P_OHM = dd.summary.global_quantities.power_ohm.value
     P_NBI = dd.summary.heating_current_drive.power_nbi.value
     P_ECH = dd.summary.heating_current_drive.power_ec.value
     P_ICH = dd.summary.heating_current_drive.power_ic.value
     P_LH = dd.summary.heating_current_drive.power_lh.value
-    P_fusion = dd.summary.fusion.power.value.value
-    P_other = dd.summary.heating_current_drive.power_additional
+    P_fusion = dd.summary.fusion.power.value
+    P_other = dd.summary.heating_current_drive.power_additional.value
     return time, W, P_rad_core, P_OHM, P_NBI, P_ECH, P_ICH, P_LH, P_fusion, P_other
 end
 
@@ -441,8 +466,13 @@ function calc_loss_power(
     P_fusion=nothing,
     P_other=nothing,
 )::Array{Float64}
-    dWdt = IMAS.gradient(time, W)
     nt = length(time)
+    if nt > 1
+        dWdt = IMAS.gradient(time, W)
+    else
+        dWdt = [0.0]
+    end
+
     P_NBI, P_ECH, P_ICH, P_LH, P_fusion, P_other = set_default_power_arrays(
         nt;
         P_NBI=P_NBI,
@@ -578,16 +608,22 @@ from regression #14 in table 3 of [Eich 2013 NF]
 function calc_heat_flux_width(dd::IMAS.dd; version::Int=1)::Array{Float64}
     if version == 1
         B_ϕ_axis =
-            dd.equilibrium.time_slice[:].global_quantities.magnetic_axis.b_field_tor
-        P_SOL = calc_loss_power(dd)
-        R_geo = dd.summary.boundary.geometric_axis_r.value
-        aₘᵢₙₒᵣ = dd.summary.boundary.minor_radius.value
-        κ = dd.summary.boundary.elongation.value
-        Iₚ = dd.summary.global_quantities.ip.value
+            [
+                eqt.global_quantities.magnetic_axis.b_field_tor for
+                eqt ∈ dd.equilibrium.time_slice
+            ]
+        P_SOL = calc_loss_power(dd)  # W
+        R_geo = dd.summary.boundary.geometric_axis_r.value  # m
+        aₘᵢₙₒᵣ = dd.summary.boundary.minor_radius.value  # m
+        κ = dd.summary.boundary.elongation.value  # unitless
+        Iₚ = dd.summary.global_quantities.ip.value  # A
         λq = calc_heat_flux_width.(B_ϕ_axis, P_SOL, R_geo, aₘᵢₙₒᵣ, κ, Iₚ)  # mm
     elseif version == 2
-        B_θ_OMP =
-            λq = calc_heat_flux_width.(B_θ_OMP)  # mm
+        B_θ_OMP = read_B_theta_OMP_no_ggd(dd)  # T
+        λq = calc_heat_flux_width.(B_θ_OMP)  # mm
+    end
+    if typeof(λq) == Float64
+        λq = [λq]
     end
     return λq  # mm
 end
@@ -607,8 +643,8 @@ values from the top row of table 6 from [Eich 2013 NF]. This one accepts more ba
 quantities and calculates q_cyl.
 
 B_ϕ_axis: the toroidal magnetic field component at the magnetic axis / T
-P_SOL: Power crossing the last closed flux surface / MW
-R_geo: the geometric major radius of the plasma
+P_SOL: Power crossing the last closed flux surface / W
+R_geo: the geometric major radius of the plasma / m
 (the average of R at the two points where the separatrix crosses the midplane) / m
 aₘᵢₙₒᵣ: the minor radius of the plasma / m
 κ: elongation / unitless
@@ -640,8 +676,8 @@ values from the top row of table 6 from [Eich 2013 NF]. This one needs q_cyl to 
 evaluated first.
 
 B_ϕ_axis: the toroidal magnetic field component at the magnetic axis / T
-P_SOL: Power crossing the last closed flux surface / MW
-R_geo: the geometric major radius of the plasma
+P_SOL: Power crossing the last closed flux surface / W
+R_geo: the geometric major radius of the plasma / m
 (the average of R at the two points where the separatrix crosses the midplane) / m
 q_cyl: cylindrical safety factor / unitless
 """
@@ -654,8 +690,9 @@ function calc_heat_flux_width(
     # Copied from Equation 18 of [Eldon 2022 PPCF] which came from [Eich 2013 JNM] and [Eich 2013 NF].
     # Specifically, values from table 6 (top row for JET/DIII-D/AUT) of [Eich 2013 NF] were used with
     # equation 5 of [Eich 2013 JNM]
+    P_SOL_MW = P_SOL * 1e-6  # convert W to MW
     λq =
-        0.86 * abs(B_ϕ_axis)^(-0.8) * abs(q_cyl)^(1.11) * abs(P_SOL)^0.11 *
+        0.86 * abs(B_ϕ_axis)^(-0.8) * abs(q_cyl)^(1.11) * abs(P_SOL_MW)^0.11 *
         abs(R_geo)^(-0.13)  # mm
     return λq
 end
@@ -666,7 +703,7 @@ end
 Heat flux width from scaling law, using a simple constant times the poloidal field at the
 outboard midplane from regression #14 in table 3 of [Eich 2013 NF]
 
-B_θ_OMP: poloidal magnetic field at the outboard midplane separatrix
+B_θ_OMP: poloidal magnetic field at the outboard midplane separatrix / T
 """
 function calc_heat_flux_width(B_θ_OMP::Float64)::Float64
     # From Table 3 of [Eich 2013 NF], row 3, regression #14 for all tokamaks
