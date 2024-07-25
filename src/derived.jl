@@ -14,7 +14,7 @@ export get_powr_from_dd,
     find_OMP_RZ, read_B_theta_OMP
 
 """
-    function find_OMP_RZ(dd::IMASDD.dd;
+    function find_OMP_RZ(dd::IMAS.dd;
         grid_ggd_idx::Int=1,
         space_number::Int=1,
         midplane_grid_subset::Int=11,
@@ -30,7 +30,7 @@ Reads poloidal magnetic field at the outer midplane separatrix.
   - midplane_grid_subset: index of the subset that contains the 1D outboard midplane
   - separatrix_grid_subset: index of the subset that contains the 1D separatrix
 """
-function find_OMP_RZ(dd::IMASDD.dd;
+function find_OMP_RZ(dd::IMAS.dd;
     grid_ggd_idx::Int=1,
     space_number::Int=1,
     midplane_grid_subset::Int=11,
@@ -45,7 +45,7 @@ function find_OMP_RZ(dd::IMASDD.dd;
 end
 
 """
-    function find_OMP_RZ(grid_ggd::IMASDD.edge_profiles__grid_ggd{Float64};
+    function find_OMP_RZ(grid_ggd::IMAS.edge_profiles__grid_ggd{Float64};
         space_number::Int=1,
         midplane_grid_subset::Int=11,
         separatrix_grid_subset::Int=16,
@@ -59,7 +59,7 @@ Reads poloidal magnetic field at the outer midplane separatrix.
   - midplane_grid_subset: index of the subset that contains the 1D outboard midplane
   - separatrix_grid_subset: index of the subset that contains the 1D separatrix
 """
-function find_OMP_RZ(grid_ggd::IMASDD.edge_profiles__grid_ggd{Float64};
+function find_OMP_RZ(grid_ggd::IMAS.edge_profiles__grid_ggd{Float64};
     space_number::Int=1,
     midplane_grid_subset::Int=11,
     separatrix_grid_subset::Int=16,
@@ -78,7 +78,7 @@ function find_OMP_RZ(grid_ggd::IMASDD.edge_profiles__grid_ggd{Float64};
 end
 
 """
-    read_B_theta_OMP(dd::IMASDD.dd;
+    read_B_theta_OMP(dd::IMAS.dd;
         grid_ggd_idx::Int=1,
         grid_ggds=nothing,
         space_number::Int=1,
@@ -102,7 +102,7 @@ Reads poloidal magnetic field at the outer midplane separatrix.
   - midplane_grid_subset: index of the subset that contains the 1D outboard midplane
   - separatrix_grid_subset: index of the subset that contains the 1D separatrix
 """
-function read_B_theta_OMP(dd::IMASDD.dd;
+function read_B_theta_OMP(dd::IMAS.dd;
     grid_ggd_idx::Int=1,
     grid_ggds=nothing,
     space_number::Int=1,
@@ -167,12 +167,12 @@ function read_B_theta_OMP(dd::IMASDD.dd;
 end
 
 """
-    function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int=1)
+    function read_B_theta_OMP_no_ggd(dd::IMAS.dd; time_idx::Int=1)
 
 Uses flux map in equilibrium (which is normally on a rectangular grid) to get the
 magnetic field at the midplane
 """
-function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int=1)
+function read_B_theta_OMP_no_ggd(dd::IMAS.dd; time_idx::Int=1)
 
     # r0 = dd.summary.global_quantities.r0.value
     # b0 = dd.summary.global_quantities.b0.value[time_idx]
@@ -190,7 +190,7 @@ function read_B_theta_OMP_no_ggd(dd::IMASDD.dd; time_idx::Int=1)
     psin = (psirz .- psia) ./ (psib .- psia)
     
 
-    dpsidr, dpsidz = IMASDD.gradient(r, z, psirz)
+    dpsidr, dpsidz = IMAS.gradient(r, z, psirz)
     br = -dpsidz ./ r
     bz = dpsidr ./ r
     #bphi = r0 * b0 ./ r
@@ -229,14 +229,14 @@ end
 
 # """
 #     function mag_field_from_equil_to_ggd!(
-#         dd::IMASDD.dd; time_idx::Int=1, grid_ggd_source=nothing
+#         dd::IMAS.dd; time_idx::Int=1, grid_ggd_source=nothing
 #     )
 
 # Uses flux map in equilibrium (which is normally on a rectangular grid) along with a 
 # grid_ggd definition instance to define magnetic field components on the ggd mesh.
 # """
 # function mag_field_from_equil_to_ggd!(
-#     dd::IMASDD.dd; time_idx::Int=1, grid_ggd_source=nothing,
+#     dd::IMAS.dd; time_idx::Int=1, grid_ggd_source=nothing,
 # )
 #     if grid_ggd_source == nothing
 #         grid_ggd_source = dd.edge_profiles.grid_ggd[1]
@@ -264,11 +264,11 @@ end
 # end
 
 """
-    get_power_from_dd(dd::IMASDD.dd)
+    get_power_from_dd(dd::IMAS.dd)
 
 Utility for extracting power values from the data dictionary. Intended for internal use.
 """
-function get_power_from_dd(dd::IMASDD.dd)
+function get_power_from_dd(dd::IMAS.dd)
     time = dd.summary.time
     W = dd.summary.global_quantities.energy_mhd.value
     P_rad_core = dd.summary.global_quantities.power_radiated_inside_lcfs.value
@@ -341,7 +341,7 @@ end
 
 Simple calculation of loss power if only conducted power is considered (neglecting
 radiation). This normally would function as an inner layer and be called by the version
-of this function that accepts an IMASDD.dd instance.
+of this function that accepts an IMAS.dd instance.
 """
 function calc_conducted_loss_power(
     time::Array{Float64},
@@ -364,7 +364,7 @@ function calc_conducted_loss_power(
         P_fusion=P_fusion,
         P_other=P_other,
     )
-    dWdt = IMASDD.gradient(time, W)
+    dWdt = IMAS.gradient(time, W)
     P_cond = [
         calc_conducted_loss_power(
             dWdt[i],
@@ -394,7 +394,7 @@ end
 
 Simple calculation of loss power if only conducted power is considered (neglecting
 radiation). This normally would function as an inner layer and be called by the version
-of this function that accepts an IMASDD.dd instance.
+of this function that accepts an IMAS.dd instance.
 """
 function calc_conducted_loss_power(
     dWdt::Float64,
@@ -427,7 +427,7 @@ end
 
 Simple calculation of loss power across the separatrix. Core radiation is included. This
 normally would function as an inner layer and be called by the version of this function
-that accepts an IMASDD.dd instance.
+that accepts an IMAS.dd instance.
 """
 function calc_loss_power(
     time::Array{Float64},
@@ -441,7 +441,7 @@ function calc_loss_power(
     P_fusion=nothing,
     P_other=nothing,
 )::Array{Float64}
-    dWdt = IMASDD.gradient(time, W)
+    dWdt = IMAS.gradient(time, W)
     nt = length(time)
     P_NBI, P_ECH, P_ICH, P_LH, P_fusion, P_other = set_default_power_arrays(
         nt;
@@ -483,7 +483,7 @@ end
 
 Simple calculation of loss power across the separatrix. Core radiation is included. This
 normally would function as an inner layer and be called by the version of this function
-that accepts an IMASDD.dd instance.
+that accepts an IMAS.dd instance.
 """
 function calc_loss_power(
     dWdt::Float64,
@@ -511,11 +511,11 @@ function calc_loss_power(
 end
 
 """
-    function calc_loss_power(dd::IMASDD.dd)::Array{Float64}
+    function calc_loss_power(dd::IMAS.dd)::Array{Float64}
 
 Simple calculation of loss power across the separatrix. Core radiation is included.
 """
-function calc_loss_power(dd::IMASDD.dd)::Array{Float64}
+function calc_loss_power(dd::IMAS.dd)::Array{Float64}
     time, W, P_rad_core, P_OHM, P_NBI, P_ECH, P_ICH, P_LH, P_fusion, P_other =
         get_power_from_dd(dd)
     P_SOL = calc_loss_power(
@@ -565,7 +565,7 @@ function calc_q_cyl(
 end
 
 """
-    calc_heat_flux_width(dd::IMASDD.dd; version::Int=1)
+    calc_heat_flux_width(dd::IMAS.dd; version::Int=1)
 
 Calculates heat flux width from a scaling law. Different regressions are available
 by selecting different versions of the scaling law.
@@ -575,7 +575,7 @@ top row of table 6 from [Eich 2013 NF]
 Version 2 is a simple constant times the poloidal field at the outboard midplane
 from regression #14 in table 3 of [Eich 2013 NF]
 """
-function calc_heat_flux_width(dd::IMASDD.dd; version::Int=1)::Array{Float64}
+function calc_heat_flux_width(dd::IMAS.dd; version::Int=1)::Array{Float64}
     if version == 1
         B_ϕ_axis =
             dd.equilibrium.time_slice[:].global_quantities.magnetic_axis.b_field_tor

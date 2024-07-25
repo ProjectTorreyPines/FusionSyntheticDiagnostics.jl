@@ -15,7 +15,7 @@ export magic_nesep
 
 """
     magic_nesep(
-        dd::IMASDD.dd;
+        dd::IMAS.dd;
         grid_ggd_idx::Int=1,
         space_number::Int=1,
         cell_grid_subset::Int=5,
@@ -28,7 +28,7 @@ The value is interpolated from the model.
 
 Inputs:
 
-  - dd: a data dictionary instance from IMASDD
+  - dd: a data dictionary instance from IMAS
   - grid_ggd_idx: index of the grid_ggd to use. Many cases will have only one grid_ggd.
   - space_number: space index to use. You may only have one space.
   - cell_grid_subset: index of the grid subset for cells. This is normally 5, but could be
@@ -44,7 +44,7 @@ nesep: an array of n_e,sep values in m^-3 vs time. If the dd has only one timesl
 the array will only have one element but it will still be an array.
 """
 function magic_nesep(
-    dd::IMASDD.dd;
+    dd::IMAS.dd;
     grid_ggd_idx::Int=1,
     space_number::Int=1,
     cell_grid_subset::Int=5,

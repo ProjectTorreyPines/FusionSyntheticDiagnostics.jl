@@ -10,20 +10,20 @@ default_ifo = "$(@__DIR__)/default_interferometer.json"
 """
     add_interferometer!(
         config::String=default_ifo,
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-    )::IMASDD.dd
+    )::IMAS.dd
 
 Add interferometer to IMAS structure using a JSON file and compute the
 line integrated electron density if not present
 """
 function add_interferometer!(
     config::String=default_ifo,
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-)::IMASDD.dd
+)::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.IMASDD.JSON.parsefile(config))
         add_interferometer!(
             config_dict,
             ids;
@@ -41,18 +41,18 @@ end
 """
     add_interferometer!(
         config::Dict{Symbol, Any},
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-    )::IMASDD.dd
+    )::IMAS.dd
 
 Add interferometer to IMAS structure using a Dict and compute the line integrated
 electron density if not present
 """
 function add_interferometer!(
     config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-)::IMASDD.dd
+)::IMAS.dd
     # Check for duplicates
     if length(ids.interferometer.channel) > 0
         duplicate_indices = []
@@ -91,18 +91,18 @@ function add_interferometer!(
         config[:interferometer] =
             mergewith(
                 append!,
-                IMASDD.imas2dict(ids.interferometer),
+                IMAS.imas2dict(ids.interferometer),
                 config[:interferometer],
             )
     end
-    IMASDD.dict2imas(config, ids; verbose=verbose)
+    IMAS.dict2imas(config, ids; verbose=verbose)
     compute_interferometer!(ids; rtol=rtol, n_e_gsi=n_e_gsi)
     return ids
 end
 
 """
     compute_interferometer!(
-        @nospecialize(ids::IMASDD.dd);
+        @nospecialize(ids::IMAS.dd);
         rtol::Float64=1e-3,
         n_e_gsi::Int=5,
     )
@@ -112,7 +112,7 @@ IDS structure for all the chords. The computation is based on the edge profile d
 and core profile data present in the IDS structure.
 """
 function compute_interferometer!(
-    @nospecialize(ids::IMASDD.dd);
+    @nospecialize(ids::IMAS.dd);
     rtol::Float64=1e-3,
     n_e_gsi::Int=5,
 )
@@ -122,7 +122,7 @@ function compute_interferometer!(
         for i1 ∈ 1:2
             lam = ch.wavelength[i1]
             i2 = i1 % 2 + 1
-            if IMASDD.ismissing(lam, :phase_to_n_e_line)
+            if IMAS.ismissing(lam, :phase_to_n_e_line)
                 # Taken from https://doi.org/10.1063/1.1138037
                 lam.phase_to_n_e_line =
                     (
@@ -165,7 +165,7 @@ function compute_interferometer!(
         # Special case when measurement has not been made for some time steps 
         # but edge profile data exists
         proceed =
-            (IMASDD.ismissing(ch.n_e_line, :time) || IMASDD.isempty(ch.n_e_line.time))
+            (IMAS.ismissing(ch.n_e_line, :time) || IMAS.isempty(ch.n_e_line.time))
         if !proceed
             proceed = length(ch.n_e_line.time) < length(epggd)
         end
@@ -196,7 +196,7 @@ function compute_interferometer!(
             sp = rzphi2xyz(ch.line_of_sight.second_point)
             tp = rzphi2xyz(ch.line_of_sight.third_point)
             if ch.line_of_sight.third_point ==
-               IMASDD.interferometer__channel___line_of_sight__third_point()
+               IMAS.interferometer__channel___line_of_sight__third_point()
                 chord_points = (fp, sp)
             else
                 chord_points = (fp, sp, tp)
@@ -256,7 +256,7 @@ function get_sep_bnd(ep_grid_ggd)
     ep_space = ep_grid_ggd.space[1]
     core = get_grid_subset(ep_grid_ggd, 22)
     sol = get_grid_subset(ep_grid_ggd, 23)
-    sep_bnd = IMASDD.edge_profiles__grid_ggd___grid_subset()
+    sep_bnd = IMAS.edge_profiles__grid_ggd___grid_subset()
     sep_bnd.element =
         subset_do(
             intersect,
@@ -267,9 +267,9 @@ function get_sep_bnd(ep_grid_ggd)
 end
 
 @inline function rzphi2xyz(
-    point::Union{IMASDD.interferometer__channel___line_of_sight__first_point,
-        IMASDD.interferometer__channel___line_of_sight__second_point,
-        IMASDD.interferometer__channel___line_of_sight__third_point},
+    point::Union{IMAS.interferometer__channel___line_of_sight__first_point,
+        IMAS.interferometer__channel___line_of_sight__second_point,
+        IMAS.interferometer__channel___line_of_sight__third_point},
 )
     r, z, phi = point.r, point.z, point.phi
     return r * cos(phi), r * sin(phi), z

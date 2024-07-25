@@ -1,9 +1,9 @@
-using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
+using SynthDiag: IMAS, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
     compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current, magic_nesep,
     calc_loss_power, calc_conducted_loss_power, calc_q_cyl, calc_heat_flux_width,
     find_OMP_RZ, read_B_theta_OMP
-using IMASDD: json2imas, gradient
+using IMAS: json2imas, gradient
 using Test
 using Printf
 using Plots
@@ -195,7 +195,7 @@ if args["langmuir_probes"]
 end
 
 function test_gas_response(config, excitation, plot_title, figname; fit=false)
-    ids = IMASDD.dd()
+    ids = IMAS.dd()
     add_gas_injection!(config, ids)
     ttotal = 5
     nt = Int(ttotal * 1000) + 1
