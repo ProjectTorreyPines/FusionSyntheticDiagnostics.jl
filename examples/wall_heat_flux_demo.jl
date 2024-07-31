@@ -16,6 +16,7 @@ dd = SD4SOLPS.preparation(
     core_method=core_method,
     filename=filename,
     output_format=output_format,
+    allow_boundary_flux_correction=true,
 )
 
 Rwall, Zwall, rwall, zwall, s, SOL, r, q = IMAS.mesher_HF(dd)
