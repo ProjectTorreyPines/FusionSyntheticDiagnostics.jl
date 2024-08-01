@@ -18,7 +18,9 @@ dd = SD4SOLPS.preparation(
     output_format=output_format,
     allow_boundary_flux_correction=true,
 )
-
+for eqt in dd.equilibrium.time_slice
+    IMAS.flux_surfaces(eqt)
+end
 Rwall, Zwall, rwall, zwall, s, SOL, r, q = IMAS.mesher_HF(dd)
-IMAS.particle_HF(dd.equilibrium.time_slice[1], SOL, rwall, zwall, r, q)
+Qwall, Qpara = IMAS.particle_HF(dd.equilibrium.time_slice[1], SOL, rwall, zwall, r, q)
 Plots.plot(s, Qwall)
