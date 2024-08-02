@@ -27,7 +27,7 @@ function add_gas_injection!(
     verbose::Bool=false,
 )::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.IMASDD.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
         add_gas_injection!(config_dict, ids; overwrite=overwrite, verbose=verbose)
     else
         error("Only JSON files are supported.")

@@ -20,7 +20,7 @@ function add_langmuir_probes!(
     overwrite=false, verbose=false, kwargs...,
 )::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.IMASDD.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
         add_langmuir_probes!(
             config_dict,
             ids;
