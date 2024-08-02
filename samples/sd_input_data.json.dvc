@@ -1,0 +1,12 @@
+md5: ba1ae281d65eb75d735486b63fae01aa
+frozen: true
+deps:
+- path: misc_data_files/sd_input_data.json
+  repo:
+    url: git@github.com:ProjectTorreyPines/SOLPSTestSamples.git
+    rev_lock: edf11ae6d8bb31b5a04b146bc7b09385509970e9
+outs:
+- md5: 3f27bbc15a76a4c7b768f7ea416741b8
+  size: 38179868
+  hash: md5
+  path: sd_input_data.json
