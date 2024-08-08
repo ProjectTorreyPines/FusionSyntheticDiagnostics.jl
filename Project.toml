@@ -1,7 +1,7 @@
 name = "SynthDiag"
 uuid = "c6e34158-aa22-49e4-bb12-15cbcb518ce6"
 authors = ["Anchal Gupta <guptaa@fusion.gat.com>"]
-version = "1.0.1"
+version = "1.0.2"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -23,7 +23,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ArgParse = "1"
 DSP = "0.7.9"
 DelimitedFiles = "1.9.1"
-GGDUtils = "1.0.2"
+GGDUtils = "1.0.3"
 IMAS = "1.2.2"
 Interpolations = "0.15.1"
 LsqFit = "0.15.0"
