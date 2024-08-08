@@ -1,7 +1,7 @@
-using SynthDiag: IMASDD, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
+using SynthDiag: IMAS, add_interferometer!, add_langmuir_probes!, add_gas_injection!,
     compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current
-using IMASDD: json2imas
+using IMAS: json2imas
 using Test
 using Printf
 using Plots
@@ -185,7 +185,7 @@ if args["langmuir_probes"]
 end
 
 function test_gas_response(config, excitation, plot_title, figname; fit=false)
-    ids = IMASDD.dd()
+    ids = IMAS.dd()
     add_gas_injection!(config, ids)
     ttotal = 5
     nt = Int(ttotal * 1000) + 1

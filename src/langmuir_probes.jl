@@ -8,19 +8,19 @@ default_lp = "$(@__DIR__)/default_langmuir_probes.json"
 """
     add_langmuir_probes!(
         config::String=default_lp,
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite=false, verbose=false, kwargs...,
-    )::IMASDD.dd
+    )::IMAS.dd
 
 Add langmuir probes positions and other parameters from `JSON` file to ids structure
 """
 function add_langmuir_probes!(
     config::String=default_lp,
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite=false, verbose=false, kwargs...,
-)::IMASDD.dd
+)::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
         add_langmuir_probes!(
             config_dict,
             ids;
@@ -37,17 +37,17 @@ end
 """
     add_langmuir_probes!(
         config::Dict{Symbol, Any},
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite=false, verbose=false, kwargs...,
-    )::IMASDD.dd
+    )::IMAS.dd
 
 Add langmuir probes positions and other parameters from Dictionary to ids structure
 """
 function add_langmuir_probes!(
     config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite=false, verbose=false, kwargs...,
-)::IMASDD.dd
+)::IMAS.dd
     # Check for duplicates
     if length(ids.langmuir_probes.embedded) > 0
         new_lps = Dict()
@@ -116,18 +116,18 @@ function add_langmuir_probes!(
         config[:langmuir_probes] =
             mergewith(
                 append!,
-                IMASDD.imas2dict(ids.langmuir_probes),
+                IMAS.imas2dict(ids.langmuir_probes),
                 config[:langmuir_probes],
             )
     end
-    IMASDD.dict2imas(config, ids; verbose=verbose)
+    IMAS.dict2imas(config, ids; verbose=verbose)
     compute_langmuir_probes!(ids; kwargs...)
     return ids
 end
 
 """
     compute_langmuir_probes!(
-        ids::IMASDD.dd;
+        ids::IMAS.dd;
         v_plasma::Union{Float64, Vector{Float64}, Nothing}=nothing,
         v_floating::Union{Float64, Vector{Float64}, Nothing}=nothing,
         v_probe::Union{Float64, Vector{Float64}, Nothing}=nothing,
@@ -150,7 +150,7 @@ densities using data type [`Noise`](@ref).
 
 Input arguments:
 
-  - `ids`: IMASDD.dd object
+  - `ids`: IMAS.dd object
   - `v_plasma`: Plasma potential (in V) or a vector of plasma potentials for each time
     step
   - `v_floating`: Floating potential (in V) or a vector of floating potentials for each
@@ -167,7 +167,7 @@ Input arguments:
     electron temperature, and average ion temperature.
 """
 function compute_langmuir_probes!(
-    ids::IMASDD.dd;
+    ids::IMAS.dd;
     v_plasma::Union{Float64, Vector{Float64}, Nothing}=nothing,
     v_floating::Union{Float64, Vector{Float64}, Nothing}=nothing,
     v_probe::Union{Float64, Vector{Float64}, Nothing}=nothing,
@@ -266,7 +266,7 @@ function compute_langmuir_probes!(
         if !isnothing(v_plasma) && isnothing(v_floating)
             emb_lp.v_floating.data = Te .* log.(abs.(I_isc ./ I_esc))
         end
-        if !isnothing(v_probe) && !IMASDD.ismissing(emb_lp.v_plasma.data)
+        if !isnothing(v_probe) && !IMAS.ismissing(emb_lp.v_plasma.data)
             i_probe =
                 langmuir_probe_current.(
                     v_probe - emb_lp.v_plasma.data,
@@ -369,7 +369,7 @@ function langmuir_probe_current(
     return i_probe
 end
 
-lp_data_types = Union{get_types_with(IMASDD.langmuir_probes, :data)...}
+lp_data_types = Union{get_types_with(IMAS.langmuir_probes, :data)...}
 
 """
     init_data!(q::lp_data_types, nt::Int64)
@@ -385,9 +385,9 @@ end
 """
     init_data!(
         q::Union{
-            IMASDD.langmuir_probes__embedded,
-            IMASDD.langmuir_probes__reciprocating___plunge,
-            IMASDD.langmuir_probes__reciprocating___plunge___collector,
+            IMAS.langmuir_probes__embedded,
+            IMAS.langmuir_probes__reciprocating___plunge,
+            IMAS.langmuir_probes__reciprocating___plunge___collector,
         },
         nt::Int64,
     )
@@ -399,9 +399,9 @@ they can have different lengths.
 """
 function init_data!(
     q::Union{
-        IMASDD.langmuir_probes__embedded,
-        IMASDD.langmuir_probes__reciprocating___plunge,
-        IMASDD.langmuir_probes__reciprocating___plunge___collector,
+        IMAS.langmuir_probes__embedded,
+        IMAS.langmuir_probes__reciprocating___plunge,
+        IMAS.langmuir_probes__reciprocating___plunge___collector,
     },
     nt::Int64,
 )
@@ -415,7 +415,7 @@ function init_data!(
             setproperty!(q, f, zeros(Float64, nt))
         elseif type_fobj <: AbstractArray
             if eltype(fobj) <:
-               IMASDD.langmuir_probes__reciprocating___plunge___collector
+               IMAS.langmuir_probes__reciprocating___plunge___collector
                 init_data!.(fobj, nt)
             end
         end
@@ -425,9 +425,9 @@ end
 """
     init_data!(
         q::Union{
-            IMASDD.langmuir_probes__embedded,
-            IMASDD.langmuir_probes__reciprocating___plunge,
-            IMASDD.langmuir_probes__reciprocating___plunge___collector,
+            IMAS.langmuir_probes__embedded,
+            IMAS.langmuir_probes__reciprocating___plunge,
+            IMAS.langmuir_probes__reciprocating___plunge___collector,
         },
         t::Vector{Float64},
     )
@@ -437,9 +437,9 @@ which is :time for embedded probes and :time_within_plunge for reciprocating pro
 """
 function init_data!(
     q::Union{
-        IMASDD.langmuir_probes__embedded,
-        IMASDD.langmuir_probes__reciprocating___plunge,
-        IMASDD.langmuir_probes__reciprocating___plunge___collector,
+        IMAS.langmuir_probes__embedded,
+        IMAS.langmuir_probes__reciprocating___plunge,
+        IMAS.langmuir_probes__reciprocating___plunge___collector,
     },
     t::Vector{Float64},
 )
@@ -453,21 +453,21 @@ function init_data!(
 end
 
 """
-    init_data!(q::IMASDD.langmuir_probes__reciprocating, nt::Int64)
+    init_data!(q::IMAS.langmuir_probes__reciprocating, nt::Int)
 
 Initialize each plunge in a reciprocating probe with nt length zeros.
 """
-init_data!(q::IMASDD.langmuir_probes__reciprocating, nt::Int64) =
+init_data!(q::IMAS.langmuir_probes__reciprocating, nt::Int) =
     for p ∈ q.plunge
         init_data!(p, nt)
     end
 
 """
-    init_data!(q::IMASDD.langmuir_probes__reciprocating, t::Vector{Float64})
+    init_data!(q::IMAS.langmuir_probes__reciprocating, t::Vector{Float64})
 
 Initialize each plunge in a reciprocating probe with a time vector t.
 """
-function init_data!(q::IMASDD.langmuir_probes__reciprocating, t::Vector{Float64})
+function init_data!(q::IMAS.langmuir_probes__reciprocating, t::Vector{Float64})
     for p ∈ q.plunge
         init_data!(p, t)
     end

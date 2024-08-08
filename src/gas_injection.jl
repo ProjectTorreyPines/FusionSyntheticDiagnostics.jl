@@ -12,22 +12,22 @@ default_gas_injection = "$(@__DIR__)/default_gas_injection.json"
 """
     add_gas_injection!(
         config::String=default_gas_injection,
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite::Bool=false,
         verbose::Bool=false,
-    )::IMASDD.dd
+    )::IMAS.dd
 
 Add gas valves from a JSON file and compute the gas flow rate based on the command
 signal in the gas valves.
 """
 function add_gas_injection!(
     config::String=default_gas_injection,
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite::Bool=false,
     verbose::Bool=false,
-)::IMASDD.dd
+)::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMASDD.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
         add_gas_injection!(config_dict, ids; overwrite=overwrite, verbose=verbose)
     else
         error("Only JSON files are supported.")
@@ -38,20 +38,20 @@ end
 """
     add_gas_injection!(
         config::Dict{Symbol, Any},
-        @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+        @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite::Bool=false,
         verbose::Bool=false,
-    )::IMASDD.dd
+    )::IMAS.dd
 
 Add gas valves from a dictionary and compute the gas flow rate based on the command
 signal in the gas valves.
 """
 function add_gas_injection!(
     config::Dict{Symbol, Any},
-    @nospecialize(ids::IMASDD.dd)=IMASDD.dd();
+    @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite::Bool=false,
     verbose::Bool=false,
-)::IMASDD.dd
+)::IMAS.dd
     # Check for duplicates
     if length(ids.gas_injection.valve) > 0
         duplicate_indices = []
@@ -85,11 +85,11 @@ function add_gas_injection!(
         config[:gas_injection] =
             mergewith(
                 append!,
-                IMASDD.imas2dict(ids.gas_injection),
+                IMAS.imas2dict(ids.gas_injection),
                 config[:gas_injection],
             )
     end
-    IMASDD.dict2imas(config, ids; verbose=verbose)
+    IMAS.dict2imas(config, ids; verbose=verbose)
     valves = Dict{String, Dict{Symbol, Any}}(
         valve[:name] => valve for valve ∈ config[:gas_injection][:valve]
     )
@@ -99,19 +99,19 @@ end
 
 """
     compute_gas_injection!(
-        ids::IMASDD.dd;
+        ids::IMAS.dd;
         valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
     )::Array{Vector{Float64}}
 
 Compute the gas flow rate based on the command signal in the all gas valves.
 """
 function compute_gas_injection!(
-    ids::IMASDD.dd;
+    ids::IMAS.dd;
     valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
 )::Array{Vector{Float64}}
-    if IMASDD.ismissing(ids.gas_injection, :latency)
+    if IMAS.ismissing(ids.gas_injection, :latency)
         global_latency = 0.0
-    elseif IMASDD.isempty(ids.gas_injection.latency)
+    elseif IMAS.isempty(ids.gas_injection.latency)
         global_latency = 0.0
     else
         global_latency = ids.gas_injection.latency
@@ -121,13 +121,13 @@ function compute_gas_injection!(
     for (vind, valve) ∈ enumerate(ids.gas_injection.valve)
         future_flow_rates[vind] = Float64[]
         proceed =
-            !IMASDD.ismissing(valve.response_curve, :flow_rate) &&
-            !IMASDD.ismissing(valve.response_curve, :voltage) &&
-            !IMASDD.ismissing(valve.voltage, :data) &&
-            !IMASDD.ismissing(valve.voltage, :time)
+            !IMAS.ismissing(valve.response_curve, :flow_rate) &&
+            !IMAS.ismissing(valve.response_curve, :voltage) &&
+            !IMAS.ismissing(valve.voltage, :data) &&
+            !IMAS.ismissing(valve.voltage, :time)
         if proceed
-            if !IMASDD.isempty(valve.response_curve.flow_rate) &&
-               !IMASDD.isempty(valve.response_curve.voltage)
+            if !IMAS.isempty(valve.response_curve.flow_rate) &&
+               !IMAS.isempty(valve.response_curve.voltage)
                 if length(valve.response_curve.flow_rate) !=
                    length(valve.response_curve.voltage)
                     error(
@@ -142,8 +142,8 @@ function compute_gas_injection!(
                     "Skipping computation of flow rate.",
                 )
             end
-            if !IMASDD.isempty(valve.voltage.data) &&
-               !IMASDD.isempty(valve.voltage.time)
+            if !IMAS.isempty(valve.voltage.data) &&
+               !IMAS.isempty(valve.voltage.time)
                 if length(valve.voltage.data) != length(valve.voltage.time)
                     error(
                         "$(valve.name): Length of data and time in voltage " *
@@ -244,7 +244,7 @@ end
     compute_gas_injection(
         tt::Vector{Float64},
         cmd_voltage::Vector{Float64},
-        response_curve::IMASDD.gas_injection__valve___response_curve;
+        response_curve::IMAS.gas_injection__valve___response_curve;
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
     )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
@@ -255,7 +255,7 @@ everything else is provided in base Julia types.
 function compute_gas_injection(
     tt::Vector{Float64},
     cmd_voltage::Vector{Float64},
-    response_curve::IMASDD.gas_injection__valve___response_curve;
+    response_curve::IMAS.gas_injection__valve___response_curve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
 )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
@@ -271,7 +271,7 @@ end
 
 """
     compute_gas_injection(
-        valve::IMASDD.gas_injection__valve;
+        valve::IMAS.gas_injection__valve;
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
     )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
@@ -279,7 +279,7 @@ end
 Top most level function to compute gas flow rate for a single valve.
 """
 function compute_gas_injection(
-    valve::IMASDD.gas_injection__valve;
+    valve::IMAS.gas_injection__valve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
 )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
@@ -294,7 +294,7 @@ end
 
 """
     compute_gas_injection!(
-        valve::IMASDD.gas_injection__valve;
+        valve::IMAS.gas_injection__valve;
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
     )::Vector{Float64}
@@ -302,7 +302,7 @@ end
 In-place version of [`compute_gas_injection`](@ref) function for a single valve.
 """
 function compute_gas_injection!(
-    valve::IMASDD.gas_injection__valve;
+    valve::IMAS.gas_injection__valve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
 )::Vector{Float64}
@@ -508,7 +508,7 @@ end
         resample_dt::Float64=0.02,
         gi_fit_guess::Vector{Float64}=[1.0, 1.0],
         response_curve_voltage::Vector{Float64}=collect(0:0.001:11),
-    )::Tuple{IMASDD.gas_injection__valve___response_curve, Dict{Symbol, Any}}
+    )::Tuple{IMAS.gas_injection__valve___response_curve, Dict{Symbol, Any}}
 
 Function to fit a gas calibration shot data to a gas injection model. It requires 2 set
 of data:
@@ -535,7 +535,7 @@ function get_gas_injection_response(
     resample_dt::Float64=0.02,
     gi_fit_guess::Vector{Float64}=[1.0, 1.0],
     response_curve_voltage::Vector{Float64}=collect(0:0.001:11),
-)::Tuple{IMASDD.gas_injection__valve___response_curve, Dict{Symbol, Any}}
+)::Tuple{IMAS.gas_injection__valve___response_curve, Dict{Symbol, Any}}
     tt =
         collect(min(cmd_tt[1], P_ves_tt[1]):resample_dt:max(cmd_tt[end], P_ves_tt[end]))
     cmd = downsample_smooth(cmd_tt, cmd, tt)
@@ -561,7 +561,7 @@ function get_gas_injection_response(
     )
 
     # Calculate the response curve
-    response_curve = IMASDD.gas_injection__valve___response_curve()
+    response_curve = IMAS.gas_injection__valve___response_curve()
     response_curve.voltage = response_curve_voltage
     response_curve.flow_rate = gi_model(response_curve_voltage, coef(fit))
 
@@ -573,14 +573,14 @@ end
 """
     get_required_gas_cmd(
             required_flow_rate::Float64,
-            response_curve::IMASDD.gas_injection__valve___response_curve,
+            response_curve::IMAS.gas_injection__valve___response_curve,
         )::Float64
 
 Function to get the required gas command voltage to achieve the required flow rate.
 """
 function get_required_gas_cmd(
     required_flow_rate::Float64,
-    response_curve::IMASDD.gas_injection__valve___response_curve,
+    response_curve::IMAS.gas_injection__valve___response_curve,
 )::Float64
     gas_cmd = linear_interpolation(response_curve.flow_rate, response_curve.voltage)
     return gas_cmd(required_flow_rate)
@@ -589,14 +589,14 @@ end
 """
     get_required_gas_cmd(
         required_flow_rate::Vector{Float64},
-        response_curve::IMASDD.gas_injection__valve___response_curve,
+        response_curve::IMAS.gas_injection__valve___response_curve,
     )::Vector{Float64}
 
 Function to get the required gas command voltage to achieve the required flow rate.
 """
 function get_required_gas_cmd(
     required_flow_rate::Vector{Float64},
-    response_curve::IMASDD.gas_injection__valve___response_curve,
+    response_curve::IMAS.gas_injection__valve___response_curve,
 )::Vector{Float64}
     gas_cmd = linear_interpolation(response_curve.flow_rate, response_curve.voltage)
     return gas_cmd.(required_flow_rate)
