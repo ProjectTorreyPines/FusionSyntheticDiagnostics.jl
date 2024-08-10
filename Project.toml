@@ -1,7 +1,7 @@
 name = "SynthDiag"
 uuid = "c6e34158-aa22-49e4-bb12-15cbcb518ce6"
 authors = ["Anchal Gupta <guptaa@fusion.gat.com>"]
-version = "1.0.2"
+version = "1.0.3"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
