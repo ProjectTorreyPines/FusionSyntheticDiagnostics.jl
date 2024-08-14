@@ -230,7 +230,7 @@ function compute_gas_injection(
             )
         end
         if !isnothing(LPF)
-            flow_rate = filt(LPF, flow_rate)
+            flow_rate = filt(LPF, flow_rate, create_si(LPF, flow_rate[1]))
         end
         flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
         future_flow_rates = flow_rate[end-skip+2:end]
@@ -343,6 +343,36 @@ function get_lpf(
     a = [2 * damping * ωₙ, ωₙ^2]
     filter_s = Biquad{:s}(b..., a...)
     return convert(SecondOrderSections, bilinear(filter_s, fs))
+end
+
+"""
+    create_si(filter, last_val)
+
+Create initial state for a filter based on a provided last value. This assumes that
+upto this point, there was a constant command on (called prev_xi in this code) and the
+filter had reached equilibrium to a constant output which is the last_val provided.
+"""
+function create_si(filter::SecondOrderSections, last_val::Float64)
+    n = length(filter.biquads)
+    g = filter.g
+    si = zeros(Float64, 2, n)
+    for fi ∈ n:-1:1
+        b0 = filter.biquads[fi].b0
+        b1 = filter.biquads[fi].b1
+        b2 = filter.biquads[fi].b2
+        a1 = filter.biquads[fi].a1
+        a2 = filter.biquads[fi].a2
+        if fi == n
+            prev_yi = last_val / g
+        else
+            prev_yi = last_val
+        end
+        prev_xi = prev_yi * (1 + a1 + a2) / (b0 + b1 + b2)
+        si[2, fi] = b2 * prev_xi - a2 * prev_yi
+        si[1, fi] = si[2, fi] + b1 * prev_xi - a1 * prev_yi
+        last_val = prev_xi
+    end
+    return si
 end
 
 """
