@@ -182,7 +182,7 @@ end
         response_curve_flow_rate::Vector{Float64};
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
-    )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+    )::Tuple{Vector{Float64}, Vector{Float64}, Union{Nothing, Vector{Float64}}}
 
 Lowest level function to compute gas flow rate based on the command voltage data and
 response cruve data all provided in base Julia types.
@@ -194,14 +194,15 @@ function compute_gas_injection(
     response_curve_flow_rate::Vector{Float64};
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
-)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+)::Tuple{Vector{Float64}, Vector{Float64}, Union{Nothing, Vector{Float64}}}
     latency = deepcopy(global_latency)
     LPF = nothing
     dribble_tau = nothing
     if :latency ∈ keys(valve_model)
         latency = valve_model[:latency]
     end
-    if :time_constant ∈ keys(valve_model) && :damping ∈ keys(valve_model)
+    if :time_constant ∈ keys(valve_model) && :damping ∈ keys(valve_model) &&
+       length(tt) > 1
         LPF = get_lpf(
             1 / (tt[2] - tt[1]),
             valve_model[:time_constant],
@@ -222,7 +223,7 @@ function compute_gas_injection(
     if length(tt_over_lat) > 0
         skip = tt_over_lat[1]
         flow_rate = valve_response.(cmd_voltage)
-        if !isnothing(dribble_tau)
+        if !isnothing(dribble_tau) && length(tt) > 1
             flow_rate = dribble(
                 flow_rate,
                 dribble_tau,
@@ -236,6 +237,8 @@ function compute_gas_injection(
         future_flow_rates = flow_rate[end-skip+2:end]
         flow_rate[1:skip-1] .= 0.0
         flow_rate[skip:end] = flow_rate[1:end-skip+1]
+    else
+        future_flow_rates = nothing
     end
     return tt, flow_rate, future_flow_rates
 end
@@ -247,7 +250,7 @@ end
         response_curve::IMAS.gas_injection__valve___response_curve;
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
-    )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+    )::Tuple{Vector{Float64}, Vector{Float64}, Union{Nothing, Vector{Float64}}}
 
 Convinience function format where response curve is provided as the ids type but
 everything else is provided in base Julia types.
@@ -258,7 +261,7 @@ function compute_gas_injection(
     response_curve::IMAS.gas_injection__valve___response_curve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
-)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+)::Tuple{Vector{Float64}, Vector{Float64}, Union{Nothing, Vector{Float64}}}
     return compute_gas_injection(
         tt,
         cmd_voltage,
@@ -274,7 +277,7 @@ end
         valve::IMAS.gas_injection__valve;
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
-    )::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+    )::Tuple{Vector{Float64}, Vector{Float64}, Union{Nothing, Vector{Float64}}}
 
 Top most level function to compute gas flow rate for a single valve.
 """
@@ -282,7 +285,7 @@ function compute_gas_injection(
     valve::IMAS.gas_injection__valve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
-)::Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}
+)::Tuple{Vector{Float64}, Vector{Float64}, Union{Nothing, Vector{Float64}}}
     return compute_gas_injection(
         valve.voltage.time,
         valve.voltage.data,
@@ -297,7 +300,7 @@ end
         valve::IMAS.gas_injection__valve;
         valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
         global_latency::Float64=0.0,
-    )::Vector{Float64}
+    )::Union{Nothing, Vector{Float64}}
 
 In-place version of [`compute_gas_injection`](@ref) function for a single valve.
 """
@@ -305,7 +308,7 @@ function compute_gas_injection!(
     valve::IMAS.gas_injection__valve;
     valve_model::Dict{Symbol, Any}=Dict{Symbol, Any}(),
     global_latency::Float64=0.0,
-)::Vector{Float64}
+)::Union{Nothing, Vector{Float64}}
     tt, flow_rate, future_flow_rates = compute_gas_injection(
         valve;
         valve_model=valve_model,
