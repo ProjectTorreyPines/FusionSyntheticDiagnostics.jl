@@ -58,13 +58,19 @@ function Noise(pgram::DSP.Periodograms.Periodogram)::Noise
 end
 
 """
-    Noise(power_spectrum::Vector{Float64}, freq::AbstractRange)::Noise
+    Noise(
+        power_spectral_density::Vector{Float64},
+        freq::Union{DSP.Periodograms.Frequencies, AbstractRange},
+    )::Noise
 
 Create a noise model from a power spectral density data given as a vector along with
 frequency values. The power spectral density is stored as a
 `DSP.Periodograms.Periodogram` calculated from the input data.
 """
-function Noise(power_spectral_density::Vector{Float64}, freq::AbstractRange)::Noise
+function Noise(
+    power_spectral_density::Vector{Float64},
+    freq::Union{DSP.Periodograms.Frequencies, AbstractRange},
+)::Noise
     pgram = DSP.Periodograms.Periodogram(power_spectral_density, freq)
     return Noise(pgram)
 end
