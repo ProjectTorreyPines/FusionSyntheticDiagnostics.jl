@@ -21,6 +21,8 @@ jobs:
     uses: ProjectTorreyPines/GitHubActionsWorkflows/.github/workflows/test.yml@master
     secrets: inherit
     with:
+      use_coverage: true
+      use_FuseRegistry: false
       upload_artifact: true
       artifact_name: test_result_images
       artifact_path: test/*.png

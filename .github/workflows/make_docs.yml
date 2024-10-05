@@ -18,3 +18,5 @@ on:
 jobs:
   make_docs:
     uses: ProjectTorreyPines/GitHubActionsWorkflows/.github/workflows/make_docs.yml@master
+    with:
+      use_FuseRegistry: false

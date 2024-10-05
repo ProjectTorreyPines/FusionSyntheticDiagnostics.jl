@@ -1,0 +1,12 @@
+name: Register updated version with Julia Registry
+
+# This workflow should only be used with push trigger on master branch with changes to Project.toml
+# Pull requests are always followed with a merge push which will trigger this workflow eventually
+on:
+  push:
+    branches: master
+    paths: Project.toml
+
+jobs:
+  test:
+    uses: ProjectTorreyPines/GitHubActionsWorkflows/.github/workflows/reg_updated_pkg_ver.yml@master

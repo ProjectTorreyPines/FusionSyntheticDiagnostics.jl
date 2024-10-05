@@ -11,3 +11,5 @@ on:
 jobs:
   CompatHelper:
     uses: ProjectTorreyPines/GitHubActionsWorkflows/.github/workflows/compat_helper.yml@master
+    with:
+      use_FuseRegistry: false
