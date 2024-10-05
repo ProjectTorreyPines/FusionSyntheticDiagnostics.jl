@@ -27,7 +27,8 @@ function add_gas_injection!(
     verbose::Bool=false,
 )::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.JSON.parsefile(config)) # Use with import IMASdd as IMAS
+        # config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with using IMAS: IMAS
         add_gas_injection!(config_dict, ids; overwrite=overwrite, verbose=verbose)
     else
         error("Only JSON files are supported.")
@@ -106,9 +107,9 @@ end
 Compute the gas flow rate based on the command signal in the all gas valves.
 """
 function compute_gas_injection!(
-    ids::IMAS.dd;
+    ids::IMAS.dd{T};
     valves::Dict{String, Dict{Symbol, Any}}=Dict{String, Dict{Symbol, Any}}(),
-)::Array{Vector{Float64}}
+)::Array{Vector{Float64}} where {T}
     if IMAS.ismissing(ids.gas_injection, :latency)
         global_latency = 0.0
     elseif IMAS.isempty(ids.gas_injection.latency)

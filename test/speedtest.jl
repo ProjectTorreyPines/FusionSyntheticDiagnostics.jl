@@ -1,7 +1,8 @@
-using SynthDiag: add_interferometer!, add_langmuir_probes!, Noise,
+using FusionSyntheticDiagnostics: IMAS, add_interferometer!, add_langmuir_probes!,
+    Noise,
     OverwriteAttemptError, add_gas_injection!, compute_gas_injection,
     get_gas_injection_response
-using SynthDiag.IMAS: json2imas, dd
+import IMASdd: json2imas
 using DelimitedFiles: readdlm
 
 println("-----------------------------------------------------------------------------")
@@ -45,7 +46,7 @@ print("add_langmuir_probes!() time (true runtime): ")
 println("-----------------------------------------------------------------------------")
 config = "$(@__DIR__)/../src/default_gas_injection.json"
 excitation(t) = 0.6
-ids = dd();
+ids = IMAS.dd();
 add_gas_injection!(config, ids)
 ttotal = 5
 nt = Int(ttotal * 1000) + 1
@@ -89,8 +90,9 @@ ids.gas_injection.valve[1].response_curve = gasd_resp_curve
 gasd_model[:time_constant] = 0.3
 gasd_model[:damping] = 0.8
 
-valves = Dict("GASD" => gasd_model)
-
+valves = Dict{String, Dict{Symbol, Any}}("GASD" => gasd_model)
+println(typeof(ids))
+println(typeof(valves))
 print("compute_gas_injection() time with compilation: ")
 @time compute_gas_injection(ids; valves=valves)
 

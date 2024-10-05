@@ -1,4 +1,4 @@
-import GGDUtils: interp, get_types_with
+import IMASggd: interp, get_types_with
 import PhysicalConstants.CODATA2018: m_e, m_u, e
 
 export add_langmuir_probes!, compute_langmuir_probes!, langmuir_probe_current
@@ -20,7 +20,8 @@ function add_langmuir_probes!(
     overwrite=false, verbose=false, kwargs...,
 )::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
+        config_dict = convert_strings_to_symbols(IMAS.JSON.parsefile(config)) # Use with import IMASdd as IMAS
+        # config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with using IMAS: IMAS
         add_langmuir_probes!(
             config_dict,
             ids;

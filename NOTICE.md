@@ -1,9 +1,9 @@
-GGDUtils.jl
+FusionSyntheticDiagnostics.jl
 =========
 
-The purpose of this NOTICE file is to provide legal notices and acknowledgments that must be displayed to users in any derivative works or distributions. This file does not alter the terms of the Apache 2.0 license that governs the use and distribution of the SynthDiag.jl package.
+The purpose of this NOTICE file is to provide legal notices and acknowledgments that must be displayed to users in any derivative works or distributions. This file does not alter the terms of the Apache 2.0 license that governs the use and distribution of the FusionSyntheticDiagnostics.jl package.
 
-GGDUtils.jl was originally developed under the ProjectTorreyPines by the Magnetic Fusion Energy group at General Atomics.
+FusionSyntheticDiagnostics.jl was originally developed under the ProjectTorreyPines by the Magnetic Fusion Energy group at General Atomics.
 
 If this software contributes to an academic publication, please cite it as follows:
 A. Gupta, D. Eldon, H. Anand, A. Dautt-Silva, S. De Pascuale, J. Lore, O. Meneghini, and J.S. Park, "Plasma boundary control development using a time-dependent scrape-off layer model in closed-loop simulations", Nucl. Mater. Energy, manuscript in preparation for PSI conference (2024).

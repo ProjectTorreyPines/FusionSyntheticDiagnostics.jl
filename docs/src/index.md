@@ -1,5 +1,5 @@
 
-# SynthDiag.jl 
+# FusionSyntheticDiagnostics.jl 
 
 ```@contents
 Pages = ["index.md"]
@@ -8,13 +8,11 @@ Depth = 5
 
 ## Installation
 
-SynthDiag is registered with public repository [FuseRegistry](https://github.com/ProjectTorreyPines/FuseRegistry.jl/). First [install Julia](https://github.com/JuliaLang/juliaup?tab=readme-ov-file#juliaup---julia-version-manager), then:
+First [install Julia](https://github.com/JuliaLang/juliaup?tab=readme-ov-file#juliaup---julia-version-manager), then:
 
 ```julia
 using Pkg
-Pkg.Registry.add(RegistrySpec(url="https://github.com/ProjectTorreyPines/FuseRegistry.jl.git"))
-Pkg.Registry.add("General")
-Pkg.add("SynthDiag")
+Pkg.add("FusionSyntheticDiagnostics")
 ```
 
 ## Synthetic Diagnostics
@@ -48,13 +46,13 @@ Gas valves can be added using IMAS compatible `JSON` file that describes the met
 add_gas_injection!
 compute_gas_injection
 compute_gas_injection!
-SynthDiag.get_lpf
-SynthDiag.dribble
-SynthDiag.downsample_smooth
-SynthDiag.find_delay
+FusionSyntheticDiagnostics.get_lpf
+FusionSyntheticDiagnostics.dribble
+FusionSyntheticDiagnostics.downsample_smooth
+FusionSyntheticDiagnostics.find_delay
 get_gas_injection_response
-SynthDiag.gi_model
-SynthDiag.int_gi_model
+FusionSyntheticDiagnostics.gi_model
+FusionSyntheticDiagnostics.int_gi_model
 get_required_gas_cmd
 ```
 

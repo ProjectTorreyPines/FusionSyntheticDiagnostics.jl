@@ -1,18 +1,16 @@
-# SynthDiag.jl
+# FusionSyntheticDiagnostics.jl
 
-![Format Check](https://github.com/ProjectTorreyPines/SynthDiag.jl/actions/workflows/format_check.yml/badge.svg)
-![Docs](https://github.com/ProjectTorreyPines/SynthDiag.jl/actions/workflows/make_docs.yml/badge.svg)
-![Tests](https://github.com/ProjectTorreyPines/SynthDiag.jl/actions/workflows/test.yml/badge.svg)
+![Format Check](https://github.com/ProjectTorreyPines/FusionSyntheticDiagnostics.jl/actions/workflows/format_check.yml/badge.svg)
+![Docs](https://github.com/ProjectTorreyPines/FusionSyntheticDiagnostics.jl/actions/workflows/make_docs.yml/badge.svg)
+![Tests](https://github.com/ProjectTorreyPines/FusionSyntheticDiagnostics.jl/actions/workflows/test.yml/badge.svg)
 
-Package that defines synthetic diagnostics to generate sensor data based on plasma profile and syntehtic actuators. For installation and usage instructions, see the [online documentation](https://projecttorreypines.github.io/SynthDiag.jl/stable). For documentation on under development branch, see [dev online documentation](https://projecttorreypines.github.io/SynthDiag.jl/dev).
+Package that defines synthetic diagnostics to generate sensor data based on plasma profile and synthetic actuators for fusion devices. For installation and usage instructions, see the [online documentation](https://projecttorreypines.github.io/FusionSyntheticDiagnostics.jl/stable). For documentation on under development branch, see [dev online documentation](https://projecttorreypines.github.io/FusionSyntheticDiagnostics.jl/dev).
 
 ## Installation
 
-SynthDiag is registered with public repository [FuseRegistry](https://github.com/ProjectTorreyPines/FuseRegistry.jl/). First [install Julia](https://github.com/JuliaLang/juliaup?tab=readme-ov-file#juliaup---julia-version-manager), then:
+First [install Julia](https://github.com/JuliaLang/juliaup?tab=readme-ov-file#juliaup---julia-version-manager), then:
 
 ```julia
 using Pkg
-Pkg.Registry.add(RegistrySpec(url="https://github.com/ProjectTorreyPines/FuseRegistry.jl.git"))
-Pkg.Registry.add("General")
-Pkg.add("SynthDiag")
+Pkg.add("FusionSyntheticDiagnostics")
 ```

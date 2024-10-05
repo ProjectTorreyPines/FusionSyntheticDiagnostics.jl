@@ -1,6 +1,6 @@
-module SynthDiag
+module FusionSyntheticDiagnostics
 
-using IMAS: IMAS
+import IMASdd as IMAS
 
 include("$(@__DIR__)/noise.jl")
 
@@ -12,4 +12,4 @@ include("$(@__DIR__)/langmuir_probes.jl")
 
 include("$(@__DIR__)/gas_injection.jl")
 
-end # module SynthDiag
+end # module FusionSyntheticDiagnostics

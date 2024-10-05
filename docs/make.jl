@@ -1,15 +1,15 @@
 using Documenter
-using SynthDiag
+using FusionSyntheticDiagnostics
 
 makedocs(;
-    modules=[SynthDiag],
+    modules=[FusionSyntheticDiagnostics],
     format=Documenter.HTML(),
-    sitename="SynthDiag",
+    sitename="FusionSyntheticDiagnostics",
     checkdocs=:none,
 )
 
 deploydocs(;
-    repo="github.com/ProjectTorreyPines/SynthDiag.jl.git",
+    repo="github.com/ProjectTorreyPines/FusionSyntheticDiagnostics.jl.git",
     target="build",
     branch="gh-pages",
     devbranch="master",
