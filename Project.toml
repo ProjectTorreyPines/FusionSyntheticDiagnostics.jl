@@ -21,8 +21,10 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 ArgParse = "1"
-DSP = "0.7.9"
+DSP = "0.7.9, 0.8"
 DelimitedFiles = "1.9.1"
+GGDUtils = "1.0.3, 2"
+IMAS = "1.2.2,2,3"
 IMASdd = "2"
 IMASggd = "2"
 Interpolations = "0.15.1"
