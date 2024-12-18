@@ -2,7 +2,7 @@ using FusionSyntheticDiagnostics: IMAS, add_interferometer!, add_langmuir_probes
     Noise,
     OverwriteAttemptError, add_gas_injection!, compute_gas_injection,
     get_gas_injection_response
-import IMASdd: json2imas
+import IMAS: json2imas
 using DelimitedFiles: readdlm
 
 println("-----------------------------------------------------------------------------")
