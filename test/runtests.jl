@@ -2,7 +2,7 @@ using FusionSyntheticDiagnostics: IMAS, add_interferometer!, add_langmuir_probes
     add_gas_injection!,
     compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current
-using IMASdd: json2imas
+using IMAS: json2imas
 using Test
 using Printf
 using Plots

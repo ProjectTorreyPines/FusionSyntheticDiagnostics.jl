@@ -1,6 +1,6 @@
 module FusionSyntheticDiagnostics
 
-import IMASdd as IMAS
+using IMAS: IMAS
 
 include("$(@__DIR__)/noise.jl")
 

@@ -23,7 +23,7 @@ function add_interferometer!(
     overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
 )::IMAS.dd
     if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.JSON.parsefile(config)) # Use with import IMASdd as IMAS
+        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with import IMASdd as IMAS
         # config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with using IMAS as IMAS
         add_interferometer!(
             config_dict,
