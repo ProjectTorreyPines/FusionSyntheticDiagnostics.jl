@@ -92,7 +92,7 @@ function compute_bolometer!(
     det2XYZs = Dict{String, AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}()
     ap2XYZs = Dict{String, Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}}()
     for ch ∈ ids.bolometer.channel
-        # List of transformation to go from aperture frame to R, Z, Phi frame
+        # List of transformation to go from aperture frame to X, Y, Z frame
         ap2XYZ = Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}(
             undef,
             length(ch.aperture),
@@ -121,7 +121,8 @@ end
         det2XYZ::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
     )::FoV where {T <: Real}
 
-Assuming aperture and detector are arrays of points described in 3D space on same
+Assuming aperture and detector are arrays of points described in 3D space on some
+
 coordinate axes and that the array of points for aperture lie in a plane and the array
 of points for the detector lie in a plane. This function computes the field of view
 of the detector from the aperture and returns a tuple of the half angle of the field of
@@ -129,6 +130,17 @@ view and the transformation that maps from field of view coordinates to the inpu
 coordinate frame. In the field of view coordinate frame, the field of view is a cone
 with the vertex at the origin and the axis along the z-axis, and half angle that is
 returned.
+
+First, two circles are created, centered at aperture and detector and covering entire
+area of the aperture and detector in detector frame. The frame is rotated about the
+z-axis to get the aperture normal to lie in x-z plane. In this frame, at y=0 plane,
+the aperture and detector become two line segments. The extremeties of the two line
+segments are joined to create 4 extreme rays. The pair of extreme rays creating the
+the largest angle between them is then chosen as the extreme rays that would form the
+cone of field of view (FoV). The angle bisector is calculated to get the axis of FoV
+and half-angle of FoV is calculated. These two are then returned as FoV object which
+comprises of half-angle and the transformation required to go from FoV frame to XYZ
+frame. In FoV frame, the conical axis is along the z axis.
 """
 function get_FoV(
     ch::IMAS.bolometer__channel{T},
@@ -366,6 +378,11 @@ function compute_intersection(
     return SVector(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
 end
 
+"""
+    area_of_polygon(vertices::Vector{SVector{2, Float64}})::Float64
+
+Function to calculate area of arbitrary non-self intersecting polygon.
+"""
 function area_of_polygon(vertices::Vector{SVector{2, Float64}})::Float64
     n = length(vertices)
     # Shoelace formula
@@ -381,6 +398,17 @@ function area_of_polygon(vertices::Vector{SVector{2, Float64}})::Float64
     )
 end
 
+"""
+    area(
+    outline::Union{
+        IMAS.bolometer__channel___detector__outline,
+        IMAS.bolometer__channel___aperture___outline,
+    },
+
+)::Float64
+
+Function to return area of an aperture or detector surface.
+"""
 function area(
     outline::Union{
         IMAS.bolometer__channel___detector__outline,
@@ -392,6 +420,14 @@ function area(
     )
 end
 
+"""
+    project_3D_line_to_z0(
+        p1::SVector{3, Float64},
+        p2::SVector{3, Float64},
+    )::SVector{2, Float64}
+
+Projects a 3D line between points `p1` and `p2` onto z=0 plane.
+"""
 function project_3D_line_to_z0(
     p1::SVector{3, Float64},
     p2::SVector{3, Float64},
@@ -421,6 +457,7 @@ function get_lit_sa(
     XYZ2det::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
     ap2XYZs::Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}},
 )::Float64
+    # src is in detector frame of reference
     src = XYZ2det(source)
     det_list = [
         SVector(ch.detector.outline.x1[ii], ch.detector.outline.x2[ii]) for
@@ -428,12 +465,15 @@ function get_lit_sa(
     ]
     lit_region = deepcopy(det_list)
     for (ap_ind, ap) ∈ enumerate(ch.aperture)
+        # ap2det is transformation to convert from aperture frame of detector frame
         ap2det = XYZ2det ∘ ap2XYZs[ap_ind]
         ap_list = [
             ap2det(SVector(ap.outline.x1[ii], ap.outline.x2[ii], 0.0)) for
             ii ∈ eachindex(ap.outline.x1)
         ]
+        # clip_list stores projections of src to aperture vertex onto detector plane
         clip_list = [project_3D_line_to_z0(src, app) for app ∈ ap_list]
+        # lit_region is iteratively clipped for each aperture
         lit_region = clip(lit_region, clip_list)
     end
     # In detector frame, detector center is at origin
@@ -512,6 +552,24 @@ function right_of_edge(point::SVector{2, Float64}, edge::SVector{3, Float64})::B
     return a * x + b * y + c > 0
 end
 
+"""
+    create_outline!(
+        det_or_ap::Union{
+            IMAS.bolometer__channel___aperture,
+            IMAS.bolometer__channel___detector,
+        };
+        c2o_nop::Int64=12,
+    )
+
+For a deetector or aperture, regardless of how the surface is defined (outline,
+circular, or rectangular), this function converts the surface geometry type to 1
+(outline) by computing representative outline points. For rectangular geometry,
+the four corners are computed ot create outline. For circular geomtry, `c2o_nop` number
+of points are used to approximate the circle with an outline of `c2o_nop` edges.
+
+This function is used to keep all aperture and detector surfaces in outline format for
+single format computing later.
+"""
 function create_outline!(
     det_or_ap::Union{
         IMAS.bolometer__channel___aperture,
@@ -549,6 +607,20 @@ function create_outline!(
     end
 end
 
+"""
+    get_transform_to_XYZ(
+        det_or_ap::Union{
+            IMAS.bolometer__channel___aperture,
+            IMAS.bolometer__channel___detector,
+        },
+    )::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}
+
+For an aperture(or a detctor), use the stored unit vectors to define to transform to
+go from aperture (or detector) frame to machine's XYZ frame.
+
+First rotate to become parallel to XYZ frame and then translate by the XYZ position of
+origin.
+"""
 function get_transform_to_XYZ(
     det_or_ap::Union{
         IMAS.bolometer__channel___aperture,
@@ -582,6 +654,19 @@ function get_transform_to_XYZ(
     return Translation(origin) ∘ LinearMap(RotMatrix3([x1; x2; x3]))
 end
 
+"""
+    add_bolometer_detector!(
+        ch::IMAS.bolometer__channel,
+        centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+        outline::Vector{SVector{2, Float64}},
+    )
+
+Add an arbitrary detector to a bolometer channel with supplied unit vectors and outline
+provided as an array of points.
+"""
 function add_bolometer_detector!(
     ch::IMAS.bolometer__channel,
     centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
@@ -598,6 +683,18 @@ function add_bolometer_detector!(
     return ch.detector.surface = area(ch.detector.outline)
 end
 
+"""
+    add_bolometer_detector!(
+        ch::IMAS.bolometer__channel,
+        centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+        radius::Float64,
+    )
+
+Add a circular detector to a bolometer channel with supplied unit vectors.
+"""
 function add_bolometer_detector!(
     ch::IMAS.bolometer__channel,
     centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
@@ -613,6 +710,19 @@ function add_bolometer_detector!(
     return ch.detector.surface = π * radius^2
 end
 
+"""
+    add_bolometer_detector!(
+        ch::IMAS.bolometer__channel,
+        centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+        x1_width::Float64,
+        x2_width::Float64,
+    )
+
+Add a rectangular detector to a bolometer channel with supplied unit vectors.
+"""
 function add_bolometer_detector!(
     ch::IMAS.bolometer__channel,
     centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
@@ -630,6 +740,19 @@ function add_bolometer_detector!(
     return ch.detector.surface = x1_width * x2_width
 end
 
+"""
+    add_bolometer_aperture!(
+        ch::IMAS.bolometer__channel,
+        centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+        outline::Vector{SVector{2, Float64}},
+    )
+
+Add an arbitrary aperture to a bolometer channel with supplied unit vectors and outline
+provided as an array of points.
+"""
 function add_bolometer_aperture!(
     ch::IMAS.bolometer__channel,
     centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
@@ -648,6 +771,18 @@ function add_bolometer_aperture!(
     return ap.surface = area(ap.outline)
 end
 
+"""
+    add_bolometer_aperture!(
+        ch::IMAS.bolometer__channel,
+        centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+        radius::Float64,
+    )
+
+Add a circular aperture to a bolometer channel with supplied unit vectors.
+"""
 function add_bolometer_aperture!(
     ch::IMAS.bolometer__channel,
     centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
@@ -665,6 +800,19 @@ function add_bolometer_aperture!(
     return ap.surface = π * radius^2
 end
 
+"""
+    add_bolometer_aperture!(
+        ch::IMAS.bolometer__channel,
+        centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+        x1_width::Float64,
+        x2_width::Float64,
+    )
+
+Add a rectangular aperture to a bolometer channel with supplied unit vectors.
+"""
 function add_bolometer_aperture!(
     ch::IMAS.bolometer__channel,
     centre::Union{Cylindrical{Float64, Float64}, SVector{3, Float64}},
@@ -684,6 +832,18 @@ function add_bolometer_aperture!(
     return ap.surface = x1_width * x2_width
 end
 
+"""
+    add_bolometer_det_or_ap_centre!(
+        det_or_ap::Union{
+            IMAS.bolometer__channel___detector,
+            IMAS.bolometer__channel___aperture,
+        },
+        centre::Cylindrical{Float64, Float64},
+    )
+
+Add detector or aperture center to bolometer__channel___aperture or
+bolometer__channel___detector if center provided in Cartesian coordinates.
+"""
 function add_bolometer_det_or_ap_centre!(
     det_or_ap::Union{
         IMAS.bolometer__channel___detector,
@@ -696,6 +856,18 @@ function add_bolometer_det_or_ap_centre!(
     return det_or_ap.centre.z = centre.z
 end
 
+"""
+    add_bolometer_det_or_ap_centre!(
+        det_or_ap::Union{
+            IMAS.bolometer__channel___detector,
+            IMAS.bolometer__channel___aperture,
+        },
+        centre::SVector{3, Float64},
+    )
+
+Add detector or aperture center to bolometer__channel___aperture or
+bolometer__channel___detector if center provided in Cartesian coordinates.
+"""
 function add_bolometer_det_or_ap_centre!(
     det_or_ap::Union{
         IMAS.bolometer__channel___detector,
@@ -706,6 +878,19 @@ function add_bolometer_det_or_ap_centre!(
     return add_bolometer_det_or_ap_centre!(det_or_ap, XYZ2RPZ(centre))
 end
 
+"""
+    add_bolometer_det_or_ap_uv!(
+        det_or_ap::Union{
+            IMAS.bolometer__channel___detector,
+            IMAS.bolometer__channel___aperture,
+        },
+        x1_uv::SVector{3, Float64},
+        x2_uv::SVector{3, Float64},
+        x3_uv::SVector{3, Float64},
+    )
+
+Add unit vectors to bolometer__channel___aperture or bolometer__channel___detector
+"""
 function add_bolometer_det_or_ap_uv!(
     det_or_ap::Union{
         IMAS.bolometer__channel___detector,
