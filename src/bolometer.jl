@@ -230,7 +230,7 @@ function get_FoV(
 
     bis_1, bis_2 = get_angle_bisector(fov_ray_1, fov_ray_2)
     fov_vertex = compute_intersection(bis_1, bis_2)
-    if !isnothing(compute_intersection(ap_xz_ep1, ap_xz_ep2, bis_1))
+    if !isnan(compute_intersection(ap_xz_ep1, ap_xz_ep2, bis_1))
         fov_axis_eq = bis_1
     else
         fov_axis_eq = bis_2
@@ -326,7 +326,8 @@ end
     compute_intersection(
         line1::SVector{3, Float64},
         line2::SVector{3, Float64},
-    )::Union{SVector{2, Float64}, Nothing}
+
+    )::SVector{2, Float64}
 
 Compute intersection point of two infinite lines. Return nothing if they are parallel.
 The lines are represented by the equation ``a x + b y + c = 0`` and stored as
@@ -335,12 +336,12 @@ The lines are represented by the equation ``a x + b y + c = 0`` and stored as
 function compute_intersection(
     line1::SVector{3, Float64},
     line2::SVector{3, Float64},
-)::Union{SVector{2, Float64}, Nothing}
+)::SVector{2, Float64}
     a1, b1, c1 = line1
     a2, b2, c2 = line2
     d = a1 * b2 - a2 * b1
     if d == 0
-        return nothing
+        return SVector(NaN, NaN)
     end
     x = (b1 * c2 - b2 * c1) / d
     y = (a2 * c1 - a1 * c2) / d
@@ -352,7 +353,8 @@ end
         p1::SVector{2, Float64},
         p2::SVector{2, Float64},
         line::SVector{3, Float64},
-    )::Union{SVector{2, Float64}, Nothing}
+
+    )::SVector{2, Float64}
 
 Compute intersection point of a finite line segment and an infinite line. Return nothing
 if they are parallel or the intersection point is outside the line segment. The line
@@ -363,17 +365,17 @@ function compute_intersection(
     p1::SVector{2, Float64},
     p2::SVector{2, Float64},
     line::SVector{3, Float64},
-)::Union{SVector{2, Float64}, Nothing}
+)::SVector{2, Float64}
     x1, y1 = p1
     x2, y2 = p2
     a, b, c = line
     d = a * (x2 - x1) + b * (y2 - y1)
     if d == 0
-        return nothing
+        return SVector(NaN, NaN)
     end
     t = -(a * x1 + b * y1 + c) / d
     if t < 0 || t > 1
-        return nothing
+        return SVector(NaN, NaN)
     end
     return SVector(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
 end
@@ -384,24 +386,76 @@ end
         p2::SVector{2, Float64},
         line_0::SVector{3, Float64},
         line_dir::SVector{3, Float64},
-    )::Union{SVector{3, Float64}, Nothing}
+    )::SVector{2, SVector{3, Float64}}
 
-Compute intersection point of a finite surface and an infinite line. Return nothing
-if they are parallel or the intersection point is outside the line segment.
-The finite surface is represented by two points `p1` and `p2` on x-z plane (R-Z) and
-created by rotating the line segment formed between `p1` and `p2` around the z-axis.
+Compute intersection point of a finite surface and an infinite line.
+Return SVector{2, Float64}(NaN, NaN) for no intersection.
+The finite surface is represented by two points `p1` and `p2` on x-z plane and created
+by rotating the line segment formed between `p1` and `p2` around the z-axis.
+
 Thus, finite 2D surface in 3 dimensions is given by points:
 
 ```
-x = (p1[1] * t + p2[1] * (1 - t)) * cos(phi)
-y = (p1[1] * t + p2[1] * (1 - t)) * sin(phi)
+x = (p1[1] * t + p2[1] * (1 - t)) * cos(ϕ)
+y = (p1[1] * t + p2[1] * (1 - t)) * sin(ϕ)
 z = p1[2] * t + p2[2] * (1 - t)
 ```
 
-where t is in [0, 1] and phi is in [0, 2 * pi).
+where t is in [0, 1] and ϕ is in [0, 2 * pi).
 
-The infinite line is represented by an initial point `line_0` and a
-direction `line_dir`. The line is given by the equation:
+The infinite line is represented by an initial point `line_0` and direction `line_dir`.
+The line is given by the equation:
+
+```
+x = line_0[1] + line_dir[1] * s
+y = line_0[2] + line_dir[2] * s
+z = line_0[3] + line_dir[3] * s
+```
+
+where s is a real number.
+
+It uses [`compute_intersection_s!`](@ref) to compute the intersection points and
+returns the XYZ coordinates of the intersection points.
+"""
+function compute_intersection(
+    p1::SVector{2, Float64},
+    p2::SVector{2, Float64},
+    line_0::SVector{3, Float64},
+    line_dir::SVector{3, Float64},
+)::SVector{2, SVector{3, Float64}}
+    s = compute_intersection_s(p1, p2, line_0, line_dir)
+    intersection = SVector{2, SVector{3, Float64}}(
+        line_0 + s[1] * line_dir,
+        line_0 + s[2] * line_dir,
+    )
+    return intersection
+end
+
+"""
+    compute_intersection_s(
+        p1::SVector{2, Float64},
+        p2::SVector{2, Float64},
+        line_0::SVector{3, Float64},
+        line_dir::SVector{3, Float64},
+    )::SVector{2, Float64}
+
+Compute intersection point of a finite surface and an infinite line.
+Return SVector{2, Float64}(NaN, NaN) for no intersection.
+The finite surface is represented by two points `p1` and `p2` on x-z plane and created
+by rotating the line segment formed between `p1` and `p2` around the z-axis.
+
+Thus, finite 2D surface in 3 dimensions is given by points:
+
+```
+x = (p1[1] * t + p2[1] * (1 - t)) * cos(ϕ)
+y = (p1[1] * t + p2[1] * (1 - t)) * sin(ϕ)
+z = p1[2] * t + p2[2] * (1 - t)
+```
+
+where t is in [0, 1] and ϕ is in [0, 2 * pi).
+
+The infinite line is represented by an initial point `line_0` and direction `line_dir`.
+The line is given by the equation:
 
 ```
 x = line_0[1] + line_dir[1] * s
@@ -414,136 +468,158 @@ where s is a real number.
 Thus the intersection point is computed by solving the following equation:
 
 ```
-(p1[1] * t + p2[1] * (1 - t)) * cos(phi) = line_0[1] + line_dir[1] * s
-(p1[1] * t + p2[1] * (1 - t)) * sin(phi) = line_0[2] + line_dir[2] * s
+(p1[1] * t + p2[1] * (1 - t)) * cos(ϕ) = line_0[1] + line_dir[1] * s
+(p1[1] * t + p2[1] * (1 - t)) * sin(ϕ) = line_0[2] + line_dir[2] * s
 p1[2] * t + p2[2] * (1 - t) = line_0[3] + line_dir[3] * s
 ```
 
-for t, phi, and s. If the solution is within the range [0, 1] for t and [0, 2 * pi] for
-phi, the intersection point is computed and returned. Otherwise, nothing is returned.
+for t, ϕ, and s. If the solution is within the range [0, 1] for t and [0, 2 * pi] for ϕ,
+the intersection values of s are returned.
+Otherwise, SVector{2, Float64}(NaN, NaN) is returned.
 """
-function compute_intersection(
+function compute_intersection_s(
     p1::SVector{2, Float64},
     p2::SVector{2, Float64},
     line_0::SVector{3, Float64},
     line_dir::SVector{3, Float64},
-)::Union{Array{SVector{3, Float64}}, Nothing}
-    a, b = p1
-    d, f = p2
-    g, k, m = line_0
-    h, l, n = line_dir
-    # Surface:
-    # x = (d + (a-d) t) cos(phi)
-    # y = (d + (a-d) t) sin(phi)
-    # z = f + (b-f) t
-    # Line:
-    # x = g + hs
-    # y = k + ls
-    # z = m + ns
-    # Set u = d + (a-d) t
-    #     v = f + (b-f) t
+)::SVector{2, Float64}
+
+    # Surface: for ϕ ∈ [0, 2π), t ∈ [0, 1]
+    # x = (x₂ + (x₁-x₂) t) cos(ϕ)
+    # y = (x₂ + (x₁-x₂) t) sin(ϕ)
+    # z = z₂ + (z₁-z₂) t
+    x₁, z₁ = p1
+    x₂, z₂ = p2
+
+    # Line: for s ∈ ℝ
+    # x = x₀ + xₙ s
+    # y = y₀ + yₙ s
+    # z = z₀ + zₙ s
+    x₀, y₀, z₀ = line_0
+    xₙ, yₙ, zₙ = line_dir
+
+    # Set u = x₂ + (x₁-x₂) t
+    #     v = z₂ + (z₁-z₂) t
     # Thus for surface:
-    # x = u cos(phi)
-    # y = u sin(phi)
+    # x = u cos(ϕ)
+    # y = u sin(ϕ)
     # z = v
-    # Solving for x^2 + y^2 = u^2 with line
-    # u^2 = (g + hs)^2 + (k + ls)^2
-    p = g^2 + k^2
-    q = 2 * g * h + 2 * k * l
-    r = h^2 + l^2
-    # This makes the equation u^2 = p + q s + r s^2
-    # Then solving for z = v = m + ns
-    if n == 0                # z = m
-        if b - f == 0        # Surface is parallel to x-y plane, only grazing possible
-            return nothing
-        else                            # Surface can intersect with the line               
-            t = (m - f) / (b - f)
+    # Solving for x² + y² = u² with x = x₀ + xₙ s, y = y₀ + yₙ s
+    # (x₀ + xₙ s)² + (y₀ + yₙ s)² = u²
+    # x₀² + 2 x₀ xₙ s + xₙ² s² + y₀² + 2 y₀ yₙ s + yₙ² s² = u²
+    # (xₙ² + yₙ²) s² + 2 (x₀ xₙ + y₀ yₙ) s + (x₀² + y₀² - u²) = 0
+    # Define:
+    p = xₙ^2 + yₙ^2
+    q = 2 * (x₀ * xₙ + y₀ * yₙ)
+    r = x₀^2 + y₀^2
+    # This makes the equation ps² + qs + r - u² = 0                  ... Eq(1)
+    # Here both s and u are a function of t for which we'll solve next
+
+    # Then solving for z = v = z₀ + zₙ s
+    if zₙ == 0                 # z is fixed at z = z₀
+        # Check if the Surface is parallel to x-y plane
+        if z₁ - z₂ == 0
+            # Only grazing is possible which we'll consider as no intersection
+            return SVector{2, Float64}(NaN, NaN)
+        else
+            # Surface can intersect with the line
+            # Solve for t in z = z₀ = z₂ + (z₁-z₂) t               
+            t = (z₀ - z₂) / (z₁ - z₂)
         end
-        z = m
-        u = d + (a - d) * t
+        # Check if t is within the range [0, 1]
+        if t < 0 || t > 1
+            return SVector{2, Float64}(NaN, NaN)
+        end
+        # Now we have t, so we can compute s value(s) for the intersection point(s)
+        # Compute u = x₂ + (x₁ - x₂) * t
+        u = x₂ + (x₁ - x₂) * t
         if u == 0
-            return nothing
+            # Very rare case in which the surface is actually a cone and intersection
+            # is at the tip of the cone. We'll consider this as no intersection.
+            return SVector{2, Float64}(NaN, NaN)
         end
-        # This makes the equation r s^2 + qs + p - u^2 = 0
-        ss = quadratic_roots(r, q, p - u^2)
-        if isnothing(ss)
-            return nothing
-        end
+        # Solving for s in Eq(1)
+        s = quadratic_roots(p, q, r - u^2)
     else
-        # s = (v - m) / n
-        # Thus u^2 = p + q (v - m) / n + r (v - m)^2 / n^2
-        #      u^2 = r / n^2 v^2 + (q / n - 2 m r / n^2) v + p - q m / n + m^2 r / n^2
-        α = r / (n^2)
-        β = (q / n) - (2 * m * r / (n^2))
-        γ = p - (q * m / n) + (m^2 * r / (n^2))
-        # This makes the equation u^2 = α v^2 + β v + γ
-        # Now we'll expand u and v in terms of t
-        δ = a - d
-        σ = b - f
-        # This makes u = d + δ t and v = f + σ t
-        # Thus u^2 = d^2 + 2 d δ t + δ^2 t^2 = α (f + σ t)^2 + β (f + σ t) + γ
-        # (δ^2 - α σ^2) t^2 + (2 d δ - 2 f α σ - β σ) t + (d^2 - α f^2 - β f - γ) = 0
-        A = δ^2 - α * σ^2
-        B = 2 * d * δ - 2 * f * α * σ - β * σ
-        C = d^2 - α * f^2 - β * f - γ
-        # This makes the equation A t^2 + B t + C = 0
-        # Now just solve for t if see if a solution exists
-        tt = quadratic_roots(A, B, C)
-        if isnothing(tt)
-            return nothing
-        end
-        ss = Array{Float64}(undef, 0)
-        for t ∈ tt
-            if t < 0 || t > 1
-                continue
+        # Since zₙ ≠ 0, we can get s in terms of v: z = v = z₀ + zₙ s
+        # s = (v - z₀) / zₙ
+        # Substituting s in Eq(1) we get:
+        # p ((v - z₀) / zₙ)² + q ((v - z₀) / zₙ) + r - u² = 0
+        # (p / zₙ²) v² + (q / zₙ - 2 z₀ p / zₙ²) v + r + z₀² p / zₙ² - u²= 0
+        # Define:
+        f = p / (zₙ^2)
+        g = (q / zₙ) - (2 * z₀ * p / (zₙ^2))
+        h = r + (z₀^2 * p / (zₙ^2))
+        # This makes the equation f v² + g v + h - u² = 0         ... Eq(2)
+        # Now we'll expand u and v back in terms of t
+        # Define:
+        m = x₁ - x₂
+        n = z₁ - z₂
+        # This makes u = x₂ + m t and v = z₂ + n t and Eq(2) becomes:
+        # f (z₂ + n t)² + g (z₂ + n t) + h - (x₂ + m t)² = 0
+        # (f n² - m²) t² + (2 z₂ f n + g n - 2 x₂ m) t + (f z₂² + g z₂ + h - x₂²) = 0
+        # Define:
+        a = f * n^2 - m^2
+        b = 2 * z₂ * f * n + g * n - 2 * x₂ * m
+        c = f * z₂^2 + g * z₂ + h - x₂^2
+        # This makes the equation a t² + b t + c = 0            ... Eq(3)
+        # Now just solve for t and see if a solution exists
+        tt = quadratic_roots(a, b, c)
+        sa = Array{Float64}(undef, 2)
+        for (ii, t) ∈ enumerate(tt)
+            if isnan(t)
+                sa[ii] = NaN
+            else
+                # Check if t is within the range [0, 1]
+                if t < 0 || t > 1
+                    sa[ii] = NaN
+                else
+                    # Now we have a valid t
+                    # so we can compute s value for the intersection point
+                    v = z₂ + (z₁ - z₂) * t
+                    sa[ii] = (v - z₀) / zₙ
+                end
             end
-            # Now we have a valid t, so we can compute the intersection point(s)
-            v = f + (b - f) * t
-            s = (v - m) / n
-            push!(ss, s)
         end
+        s = SVector{2, Float64}(sa)
     end
-    intersections = Array{SVector{3, Float64}}(undef, 0)
-    for s ∈ ss
-        x = g + h * s
-        y = k + l * s
-        z = m + n * s
-        push!(intersections, SVector{3, Float64}(x, y, z))
-    end
-    return intersections
+    return s
 end
 
 """
-    quadratic_roots(a::Float64, b::Float64, c::Float64)::Union{Array{Float64}, Nothing}
+    quadratic_roots(
+        a::Float64,
+        b::Float64,
+        c::Float64,
+    )::SVector{2, Float64}
 
-Compute the roots of a quadratic equation `a x^2 + b x + c = 0`. Return nothing if the
-discriminant is negative, return an array with one element if the discriminant is zero,
-and return an array with two elements if the discriminant is positive.
+Compute the roots of a quadratic equation `a x^2 + b x + c = 0`. Return 2 element
+SVector with NaN values if no real roots exist, one NaN and one real value if only
+one real root exists, and two real values if two real roots exist.
 """
 function quadratic_roots(
     a::Float64,
     b::Float64,
     c::Float64,
-)::Union{Array{Float64}, Nothing}
+)::SVector{2, Float64}
     if a == 0
         if b == 0
-            return nothing
+            return SVector{2, Float64}(NaN, NaN)
         else
             x = -c / b
-            return x
+            return SVector{2, Float64}(x, NaN)
         end
     end
     delta = b^2 - 4 * a * c
-    xx = Array{Float64}(undef, 0)
     if delta < 0
-        return nothing
+        return SVector{2, Float64}(NaN, NaN)
     elseif delta == 0
         x = -b / (2 * a)
-        return Array{Float64}([x])
+        return SVector{2, Float64}(x, NaN)
     end
     x1 = (-b + sqrt(delta)) / (2 * a)
     x2 = (-b - sqrt(delta)) / (2 * a)
-    return Array{Float64}([x1, x2])
+    return SVector{2, Float64}(x1, x2)
 end
 
 """
@@ -698,7 +774,7 @@ function clip(
             prev_point = inp_list[mod1(ii - 1, N)]
             # Compute intersection of finite line segment with infinite clip edge
             int_point = compute_intersection(prev_point, current_point, clip_edge)
-            if !isnothing(int_point)
+            if !isnan(int_point)
                 push!(out_list, int_point)
             end
             if right_of_edge(current_point, clip_edge) > 0
