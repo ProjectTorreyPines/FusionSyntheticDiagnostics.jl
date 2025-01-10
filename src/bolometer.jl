@@ -379,6 +379,174 @@ function compute_intersection(
 end
 
 """
+    compute_intersection(
+        p1::SVector{2, Float64},
+        p2::SVector{2, Float64},
+        line_0::SVector{3, Float64},
+        line_dir::SVector{3, Float64},
+    )::Union{SVector{3, Float64}, Nothing}
+
+Compute intersection point of a finite surface and an infinite line. Return nothing
+if they are parallel or the intersection point is outside the line segment.
+The finite surface is represented by two points `p1` and `p2` on x-z plane (R-Z) and
+created by rotating the line segment formed between `p1` and `p2` around the z-axis.
+Thus, finite 2D surface in 3 dimensions is given by points:
+
+```
+x = (p1[1] * t + p2[1] * (1 - t)) * cos(phi)
+y = (p1[1] * t + p2[1] * (1 - t)) * sin(phi)
+z = p1[2] * t + p2[2] * (1 - t)
+```
+
+where t is in [0, 1] and phi is in [0, 2 * pi).
+
+The infinite line is represented by an initial point `line_0` and a
+direction `line_dir`. The line is given by the equation:
+
+```
+x = line_0[1] + line_dir[1] * s
+y = line_0[2] + line_dir[2] * s
+z = line_0[3] + line_dir[3] * s
+```
+
+where s is a real number.
+
+Thus the intersection point is computed by solving the following equation:
+
+```
+(p1[1] * t + p2[1] * (1 - t)) * cos(phi) = line_0[1] + line_dir[1] * s
+(p1[1] * t + p2[1] * (1 - t)) * sin(phi) = line_0[2] + line_dir[2] * s
+p1[2] * t + p2[2] * (1 - t) = line_0[3] + line_dir[3] * s
+```
+
+for t, phi, and s. If the solution is within the range [0, 1] for t and [0, 2 * pi] for
+phi, the intersection point is computed and returned. Otherwise, nothing is returned.
+"""
+function compute_intersection(
+    p1::SVector{2, Float64},
+    p2::SVector{2, Float64},
+    line_0::SVector{3, Float64},
+    line_dir::SVector{3, Float64},
+)::Union{Array{SVector{3, Float64}}, Nothing}
+    a, b = p1
+    d, f = p2
+    g, k, m = line_0
+    h, l, n = line_dir
+    # Surface:
+    # x = (d + (a-d) t) cos(phi)
+    # y = (d + (a-d) t) sin(phi)
+    # z = f + (b-f) t
+    # Line:
+    # x = g + hs
+    # y = k + ls
+    # z = m + ns
+    # Set u = d + (a-d) t
+    #     v = f + (b-f) t
+    # Thus for surface:
+    # x = u cos(phi)
+    # y = u sin(phi)
+    # z = v
+    # Solving for x^2 + y^2 = u^2 with line
+    # u^2 = (g + hs)^2 + (k + ls)^2
+    p = g^2 + k^2
+    q = 2 * g * h + 2 * k * l
+    r = h^2 + l^2
+    # This makes the equation u^2 = p + q s + r s^2
+    # Then solving for z = v = m + ns
+    if n == 0                # z = m
+        if b - f == 0        # Surface is parallel to x-y plane, only grazing possible
+            return nothing
+        else                            # Surface can intersect with the line               
+            t = (m - f) / (b - f)
+        end
+        z = m
+        u = d + (a - d) * t
+        if u == 0
+            return nothing
+        end
+        # This makes the equation r s^2 + qs + p - u^2 = 0
+        ss = quadratic_roots(r, q, p - u^2)
+        if isnothing(ss)
+            return nothing
+        end
+    else
+        # s = (v - m) / n
+        # Thus u^2 = p + q (v - m) / n + r (v - m)^2 / n^2
+        #      u^2 = r / n^2 v^2 + (q / n - 2 m r / n^2) v + p - q m / n + m^2 r / n^2
+        α = r / (n^2)
+        β = (q / n) - (2 * m * r / (n^2))
+        γ = p - (q * m / n) + (m^2 * r / (n^2))
+        # This makes the equation u^2 = α v^2 + β v + γ
+        # Now we'll expand u and v in terms of t
+        δ = a - d
+        σ = b - f
+        # This makes u = d + δ t and v = f + σ t
+        # Thus u^2 = d^2 + 2 d δ t + δ^2 t^2 = α (f + σ t)^2 + β (f + σ t) + γ
+        # (δ^2 - α σ^2) t^2 + (2 d δ - 2 f α σ - β σ) t + (d^2 - α f^2 - β f - γ) = 0
+        A = δ^2 - α * σ^2
+        B = 2 * d * δ - 2 * f * α * σ - β * σ
+        C = d^2 - α * f^2 - β * f - γ
+        # This makes the equation A t^2 + B t + C = 0
+        # Now just solve for t if see if a solution exists
+        tt = quadratic_roots(A, B, C)
+        if isnothing(tt)
+            return nothing
+        end
+        ss = Array{Float64}(undef, 0)
+        for t ∈ tt
+            if t < 0 || t > 1
+                continue
+            end
+            # Now we have a valid t, so we can compute the intersection point(s)
+            v = f + (b - f) * t
+            s = (v - m) / n
+            push!(ss, s)
+        end
+    end
+    intersections = Array{SVector{3, Float64}}(undef, 0)
+    for s ∈ ss
+        x = g + h * s
+        y = k + l * s
+        z = m + n * s
+        push!(intersections, SVector{3, Float64}(x, y, z))
+    end
+    return intersections
+end
+
+"""
+    quadratic_roots(a::Float64, b::Float64, c::Float64)::Union{Array{Float64}, Nothing}
+
+Compute the roots of a quadratic equation `a x^2 + b x + c = 0`. Return nothing if the
+discriminant is negative, return an array with one element if the discriminant is zero,
+and return an array with two elements if the discriminant is positive.
+"""
+function quadratic_roots(
+    a::Float64,
+    b::Float64,
+    c::Float64,
+)::Union{Array{Float64}, Nothing}
+    if a == 0
+        if b == 0
+            return nothing
+        else
+            x = -c / b
+            return x
+        end
+    end
+    delta = b^2 - 4 * a * c
+    xx = Array{Float64}(undef, 0)
+    if delta < 0
+        return nothing
+    elseif delta == 0
+        x = -b / (2 * a)
+        return Array{Float64}([x])
+    end
+    x1 = (-b + sqrt(delta)) / (2 * a)
+    x2 = (-b - sqrt(delta)) / (2 * a)
+    return Array{Float64}([x1, x2])
+end
+
+"""
     area_of_polygon(vertices::Vector{SVector{2, Float64}})::Float64
 
 Function to calculate area of arbitrary non-self intersecting polygon.
