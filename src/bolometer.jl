@@ -545,11 +545,11 @@ function compute_intersection_s(
         # s = (v - z₀) / zₙ
         # Substituting s in Eq(1) we get:
         # p ((v - z₀) / zₙ)² + q ((v - z₀) / zₙ) + r - u² = 0
-        # (p / zₙ²) v² + (q / zₙ - 2 z₀ p / zₙ²) v + r + z₀² p / zₙ² - u²= 0
+        # (p / zₙ²) v² + (q / zₙ - 2 z₀ p / zₙ²) v + z₀² p / zₙ²  - q z₀ / zₙ + r - u²
         # Define:
         f = p / (zₙ^2)
         g = (q / zₙ) - (2 * z₀ * p / (zₙ^2))
-        h = r + (z₀^2 * p / (zₙ^2))
+        h = (z₀^2 * p / (zₙ^2)) - (q * z₀ / zₙ) + r
         # This makes the equation f v² + g v + h - u² = 0         ... Eq(2)
         # Now we'll expand u and v back in terms of t
         # Define:
@@ -581,7 +581,7 @@ function compute_intersection_s(
                 end
             end
         end
-        s = SVector{2, Float64}(sa)
+        s = SVector{2, Float64}(sa[1], sa[2])
     end
     return s
 end
@@ -620,6 +620,22 @@ function quadratic_roots(
     x1 = (-b + sqrt(delta)) / (2 * a)
     x2 = (-b - sqrt(delta)) / (2 * a)
     return SVector{2, Float64}(x1, x2)
+end
+
+"""
+    reflect(
+    p::SVector{3,Float64},
+    n::SVector{3,Float64},
+
+)::SVector{3,Float64}
+
+Reflect an incoming ray `p` off a surface with normal `n`.
+"""
+function reflect(
+    p::SVector{3, Float64},
+    n::SVector{3, Float64},
+)::SVector{3, Float64}
+    return p - 2 * dot(p, normalize(n)) * normalize(n)
 end
 
 """
