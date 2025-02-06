@@ -21,6 +21,15 @@ Constructors:
 
     FoV(ha::Float64, fov2XYZ::AffineMap{T, U})
      where {T <: Rotation{3, Float64}, U <: SVector{3, Float64}}
+
+    FoV(
+        ha::Float64,
+        vertex::SVector{3, Float64},
+        direction::SVector{3, Float64},
+    )::FoV
+
+Convinience constructor of field of view from a given half-angle `ha`, field of view
+`vertex` in XYZ frame and unit vectore `direction` along field of view.
 """
 mutable struct FoV
     var"ha"::Float64 # Half angle of conical field of view in radians
@@ -28,6 +37,45 @@ mutable struct FoV
         T,
         U,
     } where {T <: Rotation{3, Float64}, U <: SVector{3, Float64}}
+end
+
+"""
+    FoV(
+        ha::Float64,
+        vertex::SVector{3, Float64},
+        direction::SVector{3, Float64},
+    )::FoV
+
+Convinience constructor of field of view from a given half-angle `ha`, field of view
+`vertex` in XYZ frame and unit vectore `direction` along field of view.
+"""
+function FoV(
+    ha::Float64,
+    vertex::SVector{3, Float64},
+    direction::SVector{3, Float64},
+)::FoV
+    Zn = SVector(0.0, 0.0, 1.0)
+    n = normalize(direction)
+    T = Translation(vertex)
+    ndotZn = dot(n, Zn)
+    if ndotZn == 1.0
+        R1 = R2 = LinearMap(one(RotMatrix{3, Float64}))
+    else
+        R1 = LinearMap(RotY(acos(ndotZn)))
+        R2 = LinearMap(RotZ(atan(n[2], n[1])))
+    end
+    return FoV(ha, T ∘ R2 ∘ R1)
+end
+
+"""
+    get_dir_in_XYZ(fov::FoV)::SVector{3, Float64}
+
+Function to get direction unit vector of field of view object in XYZ frame.
+"""
+function get_dir_in_XYZ(fov::FoV)::SVector{3, Float64}
+    vertex = fov.fov2XYZ(SVector(0.0, 0.0, 0.0))
+    Z1 = fov.fov2XYZ(SVector(0.0, 0.0, 1.0)) # Point (0, 0, 1) in FoV converted to XYZ
+    return Z1 - vertex # Becomes unit vector along the direction of FoV
 end
 
 """
@@ -179,7 +227,7 @@ function get_FoV(
     if ap_n == SVector(0.0, 0.0, 1.0)
         R1 = LinearMap(one(RotMatrix{3, Float64}))
     else
-        R1 = LinearMap(RotZ(-atan(ap_n[2] / ap_n[1])))
+        R1 = LinearMap(RotZ(-atan(ap_n[2], ap_n[1])))
     end
     R1_T1 = R1 ∘ T1
 
@@ -587,6 +635,59 @@ function compute_intersection_s(
 end
 
 """
+    compute_intersection_s(
+        ol::IMAS.wall__description_2d___limiter__unit___outline,
+        fov::FoV;
+        s0::Float64=0,
+    )::Tuple{Float64, SVector{3, Float64}, SVector{3, Float64}}
+
+Compute intersection of a field of view object with limiter wall outline of tokamak.
+Here, s0 is the start point of field of view which would be 0 when starting from
+detector.
+Returns the s value where intersection happends first in field of view (the distance
+of intersection point to cone's tip), the intersection point in XYZ coordinates,
+and a normal to the limiter surface at intersection which can be used to reflect
+the field of view if required.
+"""
+function compute_intersection_s(
+    ol::IMAS.wall__description_2d___limiter__unit___outline,
+    fov::FoV;
+    s0::Float64=0,
+)::Tuple{Float64, SVector{3, Float64}, SVector{3, Float64}}
+    nop = length(ol.r)
+    int_sa = Array{Float64}(undef, 2 * nop)
+    int_p1p2 = Array{Tuple{Int, Int}}(undef, 2 * nop)
+    line_0 = fov.fov2XYZ(SVector(0.0, 0.0, 0.0))
+    line_dir = get_dir_in_XYZ(fov)
+    for ii ∈ eachindex(ids.wall.description_2d[1].limiter.unit[1].outline.r)
+        p1 = ii
+        p2 = mod1(ii + 1, nop)
+        s1, s2 = compute_intersection_s(
+            SVector{2, Float64}(ol.r[p1], ol.z[p1]),
+            SVector{2, Float64}(ol.r[p2], ol.z[p2]),
+            line_0,
+            line_dir,
+        )
+        int_p1p2[2*ii-1] = (p1, p2)
+        int_p1p2[2*ii] = (p1, p2)
+        int_sa[2*ii-1] = (s1 > s0 + s_tol && !isnan(s1)) ? s1 : NaN
+        int_sa[2*ii] = (s2 > s0 + s_tol && !isnan(s2)) ? s2 : NaN
+    end
+
+    si = sortperm(int_sa)[1]
+    p1, p2 = int_p1p2[si]
+    int_p1 = SVector(ol.r[p1], 0, ol.z[p1])
+    int_p2 = SVector(ol.r[p2], 0, ol.z[p2])
+    int_s = int_sa[si]
+    int_point = line_0 + int_s * line_dir
+
+    ϕ = atan(int_point[2], int_point[1])
+    normal_to_surface =
+        RotZ(ϕ) * normalize(cross(int_p1 - int_p2, SVector(0.0, 1.0, 0.0)))
+    return int_s, int_point, normal_to_surface
+end
+
+"""
     quadratic_roots(
         a::Float64,
         b::Float64,
@@ -623,19 +724,55 @@ function quadratic_roots(
 end
 
 """
-    reflect(
-    p::SVector{3,Float64},
-    n::SVector{3,Float64},
-
-)::SVector{3,Float64}
+    reflect(p::SVector{3, Float64}, n::SVector{3, Float64})::SVector{3, Float64}
 
 Reflect an incoming ray `p` off a surface with normal `n`.
 """
-function reflect(
-    p::SVector{3, Float64},
-    n::SVector{3, Float64},
-)::SVector{3, Float64}
-    return p - 2 * dot(p, normalize(n)) * normalize(n)
+function reflect(p::SVector{3, Float64}, n::SVector{3, Float64})::SVector{3, Float64}
+    return normalize(p - 2 * dot(p, normalize(n)) * normalize(n))
+end
+
+"""
+    reflect(fov::FoV, s::Float64, n::SVector{3, Float64})::FoV
+
+Reflect an incoming field of view `fov` off a surface with normal `n` at intersection
+point given by `s` in FoV frame.
+"""
+function reflect(fov::FoV, s::Float64, n::SVector{3, Float64})::FoV
+    p = get_dir_in_XYZ(fov)
+    r = reflect(p, n)
+    new_vertex = fov.fov2XYZ(SVector(0.0, 0.0, s)) - r * s
+    return FoV(fov.ha, new_vertex, r)
+end
+
+function propagate_FoV_in_device(
+    ol::IMAS.wall__description_2d___limiter__unit___outline,
+    fov::FoV,
+    nor::Int,
+)::Tuple{Array{FoV}, Array{Float64}}
+    fov_segs = Array{FoV}(undef, nor + 1)
+    s_segs = Array{Float64}(undef, nor + 1)
+
+    # Working copy of field of view from detector
+    w_fov = deepcopy(fov)
+
+    # Point of entry into tokamak
+    int_s, _, _ = compute_intersection_s(ol, w_fov; s0=0.0)
+    fov_segs[1] = w_fov # Segement between detector and entry point into tokamak
+    s_segs[1] = int_s
+
+    r = 1 # Counter of number of reflection points
+    while r <= nor
+        int_s, _, normal_to_surface = compute_intersection_s(ol, w_fov; s0=int_s)
+        fov_segs[r+1] = w_fov  # Segement from last point to this reflection point
+        s_segs[r+1] = int_s    # Save end value of this fov_segment
+
+        # Reflect the fov about the normal to intersection surface
+        w_fov = reflect(w_fov, int_s, normal_to_surface)
+
+        r += 1
+    end
+    return fov_segs, s_segs
 end
 
 """
