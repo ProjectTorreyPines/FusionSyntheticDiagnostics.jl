@@ -1,5 +1,5 @@
 import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, m_u, e
-import QuadGK: quadgk, BatchIntegrand
+import HCubature: hcubature
 import IMASggd: interp, get_grid_subset, get_subset_boundary, subset_do, get_TPS_mats
 using StaticArrays
 using LinearAlgebra
@@ -135,7 +135,117 @@ and core profile data present in the IDS structure.
 function compute_bolometer!(
     @nospecialize(ids::IMAS.dd);
     c2o_nop::Int64=12,
+    first_wall::IMAS.wall__description_2d___limiter__unit___outline=ids.wall.description_2d[1].limiter.unit[1].outline,
+    nor::Int64=1,
+    reflection_coefficient::Float64=0.0,
+    rad_gsi=5,
+    sensitivity::Dict{String, Dict{String, Float64}}=Dict{
+        String,
+        Dict{String, Union{Float64, Dict{String, Dict{String, Float64}}}},
+    }(),
+    default_sensitivity::Float64=1.0,
+    rtol::Float64=1e-3,
 )
+    # Part I
+    # Calculate interpolation functions for edge and core regions
+
+    fix_eq_time_idx = length(ids.equilibrium.time_slice) == 1
+    fix_rad_grid_ggd_idx = length(ids.radiation.grid_ggd) == 1
+
+    rad_grid_ggd = ids.radiation.grid_ggd[1]
+    rad_space_1 = rad_grid_ggd.space[1]
+    sep_bnd_1 = get_sep_bnd(rad_grid_ggd)
+
+    TPS_mats = get_TPS_mats(rad_grid_ggd, rad_gsi)
+
+    sep_bnds =
+        Array{IMAS.radiation__grid_ggd___grid_subset}(undef, length(ids.radiation.time))
+    rad_spaces =
+        Array{IMAS.radiation__grid_ggd___space}(undef, length(ids.radiation.time))
+    edge_rad = Array{Function}(undef, length(ids.radiation.time))
+    core_rad = Array{Function}(undef, length(ids.radiation.time))
+    for ti ∈ eachindex(ids.radiation.time)
+        this_TPS_mats =
+            update_TPS_mats(
+                ti,
+                fix_rad_grid_ggd_idx,
+                ids.radiation.grid_ggd,
+                rad_gsi,
+                TPS_mats,
+            )
+        if fix_rad_grid_ggd_idx
+            rad_spaces[ti] = rad_space_1
+            sep_bnds[ti] = sep_bnd_1
+        else
+            rad_grid_ggd = ids.radiation.grid_ggd[ti]
+            rad_spaces[ti] = rad_grid_ggd.space[1]
+            sep_bnds[ti] = get_sep_bnd(rad_grid_ggd)
+        end
+
+        edge_proc_rad = Array{Function}(undef, length(ids.radiation.process))
+        core_proc_rad = Array{Function}(undef, length(ids.radiation.process))
+        for (proc_i, proc) ∈ enumerate(ids.radiation.process)
+            # Edge calculation using ggd
+
+            if proc.label ∉ sensitivity
+                sensitivity[proc.label] =
+                    Dict{String, Union{Float64, Dict{String, Float64}}}(
+                        "electrons" => default_sensitivity,
+                        "ion" => Dict{String, Dict{String, Float64}}(),
+                        "neutral" => Dict{String, Dict{String, Float64}}(),
+                    )
+            end
+            e_edge_rad = attach_sensitivity(
+                interp(proc.ggd[ti].electrons.emissivity, this_TPS_mats, rad_gsi),
+                sensitivity[proc.label]["electrons"],
+            )
+
+            i_edge_rad =
+                get_rad_with_states(
+                    proc.ggd[ti].ion, this_TPS_mats, rad_gsi,
+                    sensitivity[proc.label]["ion"]; default_sensitivity,
+                )
+
+            n_edge_rad =
+                get_rad_with_states(
+                    proc.ggd[ti].neutral, this_TPS_mats, rad_gsi,
+                    sensitivity[proc.label]["neutral"]; default_sensitivity,
+                )
+
+            edge_proc_rad_list = Array{Function}([e_edge_rad, i_edge_rad, n_edge_rad])
+
+            # Core calculation using profiles_1d
+            eqt = ids.equilibrium.time_slice[fix_eq_time_idx ? 1 : ii]
+            pp1d = proc.profiles_1d[ti]
+
+            e_core_rad = attach_sensitivity(
+                interp(pp1d.electrons.emissivity, pp1d, eqt),
+                sensitivity[proc.label]["electrons"],
+            )
+
+            i_core_rad = get_rad_with_states(
+                pp1d.ion, pp1d, eqt, sensitivity[proc.label]["ion"];
+                default_sensitivity,
+            )
+
+            n_core_rad = get_rad_with_states(
+                pp1d.neutral, pp1d, eqt, sensitivity[proc.label]["neutral"];
+                default_sensitivity,
+            )
+
+            core_proc_rad_list = Array{Function}([e_core_rad, i_core_rad, n_core_rad])
+
+            # Total edge and core radiation from this process
+            edge_proc_rad[proc_i] = sum_func_list(edge_proc_rad_list)
+            core_proc_rad[proc_i] = sum_func_list(core_proc_rad_list)
+        end
+        # Total edge and core radiation at time step ti
+        edge_rad[ti] = sum_func_list(edge_proc_rad)
+        core_rad[ti] = sum_func_list(core_proc_rad)
+    end
+
+    # Part II
+    # Calculate field of views of each bolometer channel
     FoVs = Dict{String, FoV}()
     det2XYZs = Dict{String, AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}()
     ap2XYZs = Dict{String, Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}}}()
@@ -154,12 +264,178 @@ function compute_bolometer!(
         create_outline!(ch.detector; c2o_nop=c2o_nop)
         det2XYZ = get_transform_to_XYZ(ch.detector)
 
+        XYZ2det = inv(det2XYZ)
+
         # Compute field of view for each channel
-        FoVs[ch.identifier] = get_FoV(ch, ap2XYZ[end], det2XYZ)
+        FoVs[ch.identifier] = fov = get_FoV(ch, ap2XYZ[end], det2XYZ)
         det2XYZs[ch.identifier] = det2XYZ
         ap2XYZs[ch.identifier] = ap2XYZ
+
+        # Propagate field of view from detector to inside tokamak upto
+        # nor number of reflections
+        fov_segs, s_segs = propagate_FoV_in_device(first_wall, fov, nor)
+
+        for (ti, t) ∈ enumerate(ids.radiation.time)
+            ch.power.time[ti] = t
+            integ =
+                let ch = ch, XYZ2det = XYZ2det, ap2XYZ = ap2XYZ,
+                    fov_segs = fov_segs, s_segs = s_segs,
+                    sep_bnd = sep_bnds[ti], rad_space = rad_spaces[ti],
+                    core_rad = core_rad[ti], edge_rad = edge_rad[ti],
+                    reflection_coefficient = reflection_coefficient
+
+                    sρϕ -> integrand(
+                        sρϕ,
+                        ch, XYZ2det, ap2XYZ, fov_segs, s_segs,
+                        sep_bnd, rad_space, core_rad, edge_rad,
+                        reflection_coefficient,
+                    )
+                end
+            ch.power.data[ti] = hcubature(
+                integ,
+                SVector(s_segs[2], 0.0, 0.0),
+                SVector(s_segs[-1], 1.0, 2π);
+                rtol=rtol,
+            )[1]
+        end
     end
-    return FoVs, det2XYZs, ap2XYZs
+end
+
+function integrand(
+    sρϕ::SVector{3, Float64},
+    ch::IMAS.bolometer__channel,
+    XYZ2det::AffineMap{RotMatrix3{Float64}, SVector{3, Float64}},
+    ap2XYZs::Array{AffineMap{RotMatrix3{Float64}, SVector{3, Float64}}},
+    fov_segs::Array{FoV},
+    s_segs::Array{Float64},
+    sep_bnd,
+    rad_space,
+    core_rad,
+    edge_rad,
+    reflection_coefficient::Float64,
+)
+    s, ρ, ϕ = sρϕ
+    seg_i = searchsortedfirst(s_segs, s)
+    if seg_i == 1
+        # Point is before the entry into the tokamak
+        return 0.0
+    end
+    fov = fov_segs[seg_i] # Choose the correct FoV segment
+    cr = s * tan(fov.ha * ρ)
+    dρ = s * sec(fov.ha * ρ)^2 * fov.ha
+    point = SVector(cr * cos(ϕ), cr * sin(ϕ), s)
+    source = fov.fov2XYZ(point)
+    R, _, Z = XYZ2RPZ(source)
+
+    if (R, Z) ∈ (sep_bnd, rad_space)
+        rad_val = core_rad(R, Z)
+    else
+        rad_val = edge_rad(R, Z)
+    end
+    # Get the fraction of power from this source that will be absorbed by detector
+    # This fraction is lit_soli_angle / 4pi
+    # Note that since we use solid angle, we do not need to think about 1/r^2 reduction
+    # in intensity of light. That is taken care of in get_lit_sa function.
+    lit_frac = get_lit_sa(source, ch, XYZ2det, ap2XYZs) / (4 * π)
+    return rad_val * lit_frac * reflection_coefficient^(seg_i - 2) * dρ
+end
+
+function sum_func_list(func_list::Array{Function})
+    function sum_list(r::Real, z::Real)::Float64
+        ret_val = 0.0
+        for func ∈ func_list
+            ret_val += func(r, z)
+        end
+        return ret_val
+    end
+    sum_list(slp::Tuple{V, V}) where {V <: Real} = sum_list(slp...)
+    return sum_list
+end
+
+function attach_sensitivity(func::Function, sensitivity::Float64)
+    ret_func(r::Real, z::Real) = func(r, z) * sensitivity
+    ret_func(rzp::Tuple{V, V}) where {V <: Real} = ret_func(rzp...)
+    return ret_func
+end
+
+function get_rad_with_states(
+    species::Union{
+        IMAS.radiation__process___ggd___ion,
+        IMAS.radiation__process___ggd___neutral,
+    },
+    TPS_mats::Tuple{Matrix{U}, Matrix{U}, Matrix{U}, Vector{Tuple{U, U}}},
+    rad_gsi,
+    species_sens::Dict{String, Dict{String, Float64}};
+    default_sensitivity::Float64=1.0,
+) where {U <: Real}
+    species_rad_list = Array{Function}(undef, length(species))
+    for (sp_i, sp) ∈ enumerate(species)
+        if sp.label ∉ species_sens
+            species_sens[sp.label] = Dict{String, Float64}(
+                "overall" => default_sensitivity,
+            )
+        end
+        if sp.mutilple_states_flag == 0
+            species_rad_list[sp_i] = attach_sensitivity(
+                interp(sp.emissivity, TPS_mats, rad_gsi),
+                species_sens[sp.label]["overall"],
+            )
+        else
+            sp_states_rad_list = Array{Functsp}(undef, length(sp.state))
+            sp_sens = species_sens[sp.label]
+            for (state_i, state) ∈ enumerate(sp.state)
+                if state.label ∉ sp_sens
+                    sp_sens[state_label] = default_sensitivity
+                end
+                sp_states_rad_list[state_i] = attach_sensitivity(
+                    interp(state.emissivity, TPS_mats, rad_gsi),
+                    sp_sens[state_label],
+                )
+            end
+            species_rad_list[sp_i] = sum_func_list(sp_states_rad_list)
+        end
+    end
+    return sum_func_list(species_rad_list)
+end
+
+function get_rad_with_states(
+    species::Union{
+        IMAS.radiation__process___profiles_1d___ion,
+        IMAS.radiation__process___profiles_1d___neutral,
+    },
+    pp1d::IMAS.radiation__process___profiles_1d,
+    eqt::IMAS.equilibrium__time_slice,
+    species_sens::Dict{String, Dict{String, Float64}};
+    default_sensitivity::Float64=1.0,
+)
+    species_rad_list = Array{Function}(undef, length(species))
+    for (sp_i, sp) ∈ enumerate(species)
+        if sp.label ∉ species_sens
+            species_sens[sp.label] = Dict{String, Float64}(
+                "overall" => default_sensitivity,
+            )
+        end
+        if sp.mutilple_states_flag == 0
+            species_rad_list[sp_i] = attach_sensitivity(
+                interp(sp.emissivity, pp1d, eqt),
+                species_sens[sp.label]["overall"],
+            )
+        else
+            sp_states_rad_list = Array{Functsp}(undef, length(sp.state))
+            sp_sens = species_sens[sp.label]
+            for (state_i, state) ∈ enumerate(sp.state)
+                if state.label ∉ sp_sens
+                    sp_sens[state_label] = default_sensitivity
+                end
+                sp_states_rad_list[state_i] = attach_sensitivity(
+                    interp(state.emissivity, pp1d, eqt),
+                    sp_sens[state_label],
+                )
+            end
+            species_rad_list[sp_i] = sum_func_list(sp_states_rad_list)
+        end
+    end
+    return sum_func_list(species_rad_list)
 end
 
 """
@@ -748,7 +1024,7 @@ end
 function propagate_FoV_in_device(
     ol::IMAS.wall__description_2d___limiter__unit___outline,
     fov::FoV,
-    nor::Int,
+    nor::Int64,
 )::Tuple{Array{FoV}, Array{Float64}}
     fov_segs = Array{FoV}(undef, nor + 1)
     s_segs = Array{Float64}(undef, nor + 1)
