@@ -124,7 +124,7 @@ function add_diagnostic!(
     return ids
 end
 
-function convert_strings_to_symbols(d::Dict{String, Any})
+function convert_strings_to_symbols(d::Dict{String, Any})::Dict{Symbol, Any}
     new_d = Dict{Symbol, Any}()
     for (k, v) ∈ d
         if isa(v, Dict{String, Any})
@@ -149,15 +149,56 @@ function convert_strings_to_symbols(d::Dict{String, Any})
     return new_d
 end
 
-@inline function xyz2rz(x::Float64, y::Float64, z::Float64)
+@inline function xyz2rz(x::Float64, y::Float64, z::Float64)::Tuple{Float64, Float64}
     r = sqrt(x^2 + y^2)
     return r, z
 end
 
-function update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, gsi, TPS_mats)
-    if !fix_ep_grid_ggd_idx
-        ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
-        return get_TPS_mats(ep_grid_ggd, gsi)
+all_grid_ggd = Union{IMAS.edge_profiles__grid_ggd, IMAS.radiation__grid_ggd}
+
+all_subset_element = Union{
+    IMAS.edge_profiles__grid_ggd___grid_subset___element,
+    IMAS.radiation__grid_ggd___grid_subset___element,
+}
+
+function get_sep_bnd_elements(
+    grid_ggd::all_grid_ggd,
+)::AbstractVector{<:all_subset_element}
+    space = grid_ggd.space[1]
+    core = get_grid_subset(grid_ggd, 22)
+    sol = get_grid_subset(grid_ggd, 23)
+    return subset_do(
+        intersect,
+        get_subset_boundary(space, sol),
+        get_subset_boundary(space, core),
+    )
+end
+
+function get_sep_bnd(
+    grid_ggd::IMAS.edge_profiles__grid_ggd,
+)::IMAS.edge_profiles__grid_ggd___grid_subset
+    sep_bnd = IMAS.edge_profiles__grid_ggd___grid_subset()
+    sep_bnd.element = get_sep_bnd_elements(grid_ggd)
+    return sep_bnd
+end
+
+function get_sep_bnd(
+    grid_ggd::IMAS.radiation__grid_ggd,
+)::IMAS.radiation__grid_ggd___grid_subset
+    sep_bnd = IMAS.radiation__grid_ggd___grid_subset()
+    sep_bnd.element = get_sep_bnd_elements(grid_ggd)
+    return sep_bnd
+end
+
+function update_TPS_mats(
+    ii::Int64,
+    fix_grid_ggd_idx::Bool,
+    grid_ggd::AbstractVector{<:all_grid_ggd},
+    gsi::Int64,
+    TPS_mats::Tuple{Matrix{U}, Matrix{U}, Matrix{U}, Vector{Tuple{U, U}}},
+)::Tuple{Matrix{U}, Matrix{U}, Matrix{U}, Vector{Tuple{U, U}}} where {U <: Real}
+    if !fix_grid_ggd_idx
+        return get_TPS_mats(grid_ggd[ii], gsi)
     else
         return TPS_mats
     end
