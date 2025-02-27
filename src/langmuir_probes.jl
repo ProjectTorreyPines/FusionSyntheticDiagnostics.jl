@@ -7,121 +7,27 @@ default_lp = "$(@__DIR__)/default_langmuir_probes.json"
 
 """
     add_langmuir_probes!(
-        config::String=default_lp,
+        config::Union{String, Dict{Symbol, Any}}=default_lp,
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
-        overwrite=false, verbose=false, kwargs...,
+        overwrite::Bool=false, kwargs...,
     )::IMAS.dd
 
-Add langmuir probes positions and other parameters from `JSON` file to ids structure
+Add langmuir probes positions and other parameters from `JSON` file or Julia `Dict` to
+ids structure and compute langmuir probe outputs using edge profiles data. `kwargs` are
+passed to [`compute_langmuir_probes!`](@ref).
 """
 function add_langmuir_probes!(
-    config::String=default_lp,
+    config::Union{String, Dict{Symbol, Any}}=default_lp,
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite=false, verbose=false, kwargs...,
+    overwrite::Bool=false, kwargs...,
 )::IMAS.dd
-    if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with import IMASdd as IMAS
-        # config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with using IMAS: IMAS
-        add_langmuir_probes!(
-            config_dict,
-            ids;
-            overwrite=overwrite,
-            verbose=verbose,
-            kwargs...,
-        )
-    else
-        error("Only JSON files are supported.")
-    end
-    return ids
-end
-
-"""
-    add_langmuir_probes!(
-        config::Dict{Symbol, Any},
-        @nospecialize(ids::IMAS.dd)=IMAS.dd();
-        overwrite=false, verbose=false, kwargs...,
-    )::IMAS.dd
-
-Add langmuir probes positions and other parameters from Dictionary to ids structure
-"""
-function add_langmuir_probes!(
-    config::Dict{Symbol, Any},
-    @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite=false, verbose=false, kwargs...,
-)::IMAS.dd
-    # Check for duplicates
-    if length(ids.langmuir_probes.embedded) > 0
-        new_lps = Dict()
-        if haskey(config, :langmuir_probes)
-            if haskey(config[:langmuir_probes], :embedded)
-                for emp_lps ∈ config[:langmuir_probes][:embedded]
-                    new_lps[emp_lps[:name]] = emp_lps[:identifier]
-                end
-            end
-            if haskey(config[:langmuir_probes], :reciprocating)
-                for rec_lp ∈ config[:langmuir_probes][:reciprocating]
-                    new_lps[rec_lp[:name]] = rec_lp[:identifier]
-                end
-            end
-        else
-            warning("Config does not have langmuir_probes in it. Skipping.")
-            return ids
-        end
-        dup_inds = Dict(:emb_lp => [], :rec_lp => [])
-        for (ii, emb_lp) ∈ enumerate(ids.langmuir_probes.embedded)
-            if emb_lp.name in keys(new_lps) ||
-               emb_lp.identifier in values(new_lps)
-                append!(dup_inds[:emb_lp], ii)
-            end
-        end
-        for (ii, rec_lp) ∈ enumerate(ids.langmuir_probes.reciprocating)
-            if rec_lp.name in keys(new_lps) ||
-               rec_lp.identifier in values(new_lps)
-                append!(dup_inds[:rec_lp], ii)
-            end
-        end
-        if overwrite
-            for ii ∈ reverse(dup_inds[:emb_lp])
-                println(
-                    "Overwriting embedded langmuir_probe ",
-                    "$(ids.langmuir_probes.embedded[ii].name)...",
-                )
-                deleteat!(ids.langmuir_probes.embedded, ii)
-            end
-            for ii ∈ reverse(dup_inds[:rec_lp])
-                println(
-                    "Overwriting reciprocating langmuir_probes ",
-                    "$(ids.langmuir_probes.reciprocating[ii].name)...",
-                )
-                deleteat!(ids.langmuir_probes.reciprocating, ii)
-            end
-        else
-            if length(dup_inds[:emb_lp]) + length(dup_inds[:rec_lp]) > 0
-                err_msg =
-                    "Duplicate langmuir_probes embeddeds found with " *
-                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
-                for ii ∈ dup_inds[:emb_lp]
-                    err_msg *=
-                        "$(ids.langmuir_probes.embedded[ii].identifier): " *
-                        "$(ids.langmuir_probes.embedded[ii].name)\n"
-                end
-                for ii ∈ dup_inds[:rec_lp]
-                    err_msg *=
-                        "$(ids.langmuir_probes.reciprocating[ii].identifier): " *
-                        "$(ids.langmuir_probes.reciprocating[ii].name)\n"
-                end
-                err_msg *= "Use overwrite=true to replace them."
-                throw(OverwriteAttemptError(err_msg))
-            end
-        end
-        config[:langmuir_probes] =
-            mergewith(
-                append!,
-                IMAS.imas2dict(ids.langmuir_probes),
-                config[:langmuir_probes],
-            )
-    end
-    IMAS.dict2imas(config, ids; verbose=verbose)
+    add_diagnostic!(
+        config,
+        :langmuir_probes,
+        ids;
+        overwrite=overwrite,
+        channel=[:embedded, :reciprocating],
+    )
     compute_langmuir_probes!(ids; kwargs...)
     return ids
 end
@@ -192,7 +98,13 @@ function compute_langmuir_probes!(
     ep_t_e_list = Array{Function}(undef, nt)
     ep_t_i_list = Array{Function}(undef, nt)
     for ii ∈ eachindex(epggd)
-        TPS_mats_ii = update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, n_e_gsi, TPS_mats)
+        TPS_mats_ii = update_TPS_mats(
+            ii,
+            fix_ep_grid_ggd_idx,
+            ids.edge_profiles.grid_ggd,
+            n_e_gsi,
+            TPS_mats,
+        )
         ep_n_e_list[ii] = interp(epggd[ii].electrons.density, TPS_mats_ii, n_e_gsi)
         ep_t_e_list[ii] = interp(epggd[ii].electrons.temperature, TPS_mats_ii, n_e_gsi)
         ep_t_i_list[ii] = interp(epggd[ii].t_i_average, TPS_mats_ii, n_e_gsi)
@@ -370,7 +282,52 @@ function langmuir_probe_current(
     return i_probe
 end
 
-lp_data_types = Union{get_types_with(IMAS.langmuir_probes, :data)...}
+lp_data_types =
+    Union{
+        IMAS.langmuir_probes__embedded___b_field_angle{T},
+        IMAS.langmuir_probes__embedded___distance_separatrix_midplane{T},
+        IMAS.langmuir_probes__embedded___fluence{T},
+        IMAS.langmuir_probes__embedded___heat_flux_parallel{T},
+        IMAS.langmuir_probes__embedded___ion_saturation_current{T},
+        IMAS.langmuir_probes__embedded___j_i_parallel{T},
+        IMAS.langmuir_probes__embedded___j_i_parallel_sigma{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation_kurtosis{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation_sigma{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation_skew{T},
+        IMAS.langmuir_probes__embedded___multi_temperature_fits___t_e{T},
+        IMAS.langmuir_probes__embedded___multi_temperature_fits___t_i{T},
+        IMAS.langmuir_probes__embedded___n_e{T},
+        IMAS.langmuir_probes__embedded___surface_area_effective{T},
+        IMAS.langmuir_probes__embedded___t_e{T},
+        IMAS.langmuir_probes__embedded___t_i{T},
+        IMAS.langmuir_probes__embedded___v_floating{T},
+        IMAS.langmuir_probes__embedded___v_floating_sigma{T},
+        IMAS.langmuir_probes__embedded___v_plasma{T},
+        IMAS.langmuir_probes__reciprocating___plunge___b_field_angle{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___heat_flux_parallel{
+            T,
+        },
+        IMAS.langmuir_probes__reciprocating___plunge___collector___ion_saturation_current{
+            T,
+        },
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_kurtosis{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_parallel{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_saturation{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_sigma{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_skew{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___t_e{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___t_i{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___v_floating{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___v_floating_sigma{T},
+        IMAS.langmuir_probes__reciprocating___plunge___distance_separatrix_midplane{T},
+        IMAS.langmuir_probes__reciprocating___plunge___distance_x_point_z{T},
+        IMAS.langmuir_probes__reciprocating___plunge___mach_number_parallel{T},
+        IMAS.langmuir_probes__reciprocating___plunge___n_e{T},
+        IMAS.langmuir_probes__reciprocating___plunge___t_e_average{T},
+        IMAS.langmuir_probes__reciprocating___plunge___t_i_average{T},
+        IMAS.langmuir_probes__reciprocating___plunge___v_plasma{T},
+    } where {T <: Real}
 
 """
     init_data!(q::lp_data_types, nt::Int64)

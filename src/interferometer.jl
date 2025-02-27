@@ -9,95 +9,22 @@ default_ifo = "$(@__DIR__)/default_interferometer.json"
 
 """
     add_interferometer!(
-        config::String=default_ifo,
+        config::Union{String, Dict{Symbol, Any}}=default_ifo,
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
-        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+        overwrite::Bool=false, kwargs...,
     )::IMAS.dd
 
-Add interferometer to IMAS structure using a JSON file and compute the
-line integrated electron density if not present
+Add interferometer to IMAS structure using a `JSON` file or Julia `Dict` and compute
+the line integrated electron density if not present. `kwargs` are passed to
+[`compute_interferometer!`](@ref).
 """
 function add_interferometer!(
-    config::String=default_ifo,
+    config::Union{String, Dict{Symbol, Any}}=default_ifo,
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
+    overwrite::Bool=false, kwargs...,
 )::IMAS.dd
-    if endswith(config, ".json")
-        config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with import IMASdd as IMAS
-        # config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with using IMAS as IMAS
-        add_interferometer!(
-            config_dict,
-            ids;
-            overwrite=overwrite,
-            verbose=verbose,
-            rtol=rtol,
-            n_e_gsi=n_e_gsi,
-        )
-    else
-        error("Only JSON files are supported.")
-    end
-    return ids
-end
-
-"""
-    add_interferometer!(
-        config::Dict{Symbol, Any},
-        @nospecialize(ids::IMAS.dd)=IMAS.dd();
-        overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-    )::IMAS.dd
-
-Add interferometer to IMAS structure using a Dict and compute the line integrated
-electron density if not present
-"""
-function add_interferometer!(
-    config::Dict{Symbol, Any},
-    @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite::Bool=false, verbose::Bool=false, rtol::Float64=1e-3, n_e_gsi::Int=5,
-)::IMAS.dd
-    # Check for duplicates
-    if length(ids.interferometer.channel) > 0
-        duplicate_indices = []
-        new_channels = Dict(
-            ch[:name] => ch[:identifier] for
-            ch ∈ config[:interferometer][:channel]
-        )
-        for (ii, ch) ∈ enumerate(ids.interferometer.channel)
-            if ch.name in keys(new_channels) ||
-               ch.identifier in values(new_channels)
-                append!(duplicate_indices, ii)
-            end
-        end
-        if overwrite
-            for ii ∈ reverse(duplicate_indices)
-                println(
-                    "Overwriting interferometer channel ",
-                    "$(ids.interferometer.channel[ii].name)...",
-                )
-                deleteat!(ids.interferometer.channel, ii)
-            end
-        else
-            if length(duplicate_indices) > 0
-                err_msg =
-                    "Duplicate interferometer channels found with " *
-                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
-                for ii ∈ duplicate_indices
-                    err_msg *=
-                        "$(ids.interferometer.channel[ii].identifier): " *
-                        "$(ids.interferometer.channel[ii].name)\n"
-                end
-                err_msg *= "Use overwrite=true to replace them."
-                throw(OverwriteAttemptError(err_msg))
-            end
-        end
-        config[:interferometer] =
-            mergewith(
-                append!,
-                IMAS.imas2dict(ids.interferometer),
-                config[:interferometer],
-            )
-    end
-    IMAS.dict2imas(config, ids; verbose=verbose)
-    compute_interferometer!(ids; rtol=rtol, n_e_gsi=n_e_gsi)
+    add_diagnostic!(config, :interferometer, ids; overwrite=overwrite)
+    compute_interferometer!(ids; kwargs...)
     return ids
 end
 
@@ -110,7 +37,9 @@ end
 
 Computed the line integrated electron density from the interferometer data present in
 IDS structure for all the chords. The computation is based on the edge profile data
-and core profile data present in the IDS structure.
+and core profile data present in the IDS structure. `rtol` is the relative tolerance
+for the numerical integration and `n_e_gsi` is the grid_subset_index that stores the
+electron density data in the edge profile.
 """
 function compute_interferometer!(
     @nospecialize(ids::IMAS.dd);
@@ -150,7 +79,13 @@ function compute_interferometer!(
     ep_n_e_list = [
         interp(
             epggd[ii].electrons.density,
-            update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, n_e_gsi, TPS_mats),
+            update_TPS_mats(
+                ii,
+                fix_ep_grid_ggd_idx,
+                ids.edge_profiles.grid_ggd,
+                n_e_gsi,
+                TPS_mats,
+            ),
             n_e_gsi,
         ) for ii ∈ eachindex(epggd)
     ]
@@ -208,12 +143,14 @@ function compute_interferometer!(
             for ii ∈ eachindex(epggd)
                 ch.n_e_line.time[ii] = epggd[ii].time
                 ch.n_e_line_average.time[ii] = epggd[ii].time
-                core_chord_length = update_core_chord_length(
+                core_chord_length, sep_bnd, ep_space = update_geometry(
                     ii,
                     fix_ep_grid_ggd_idx,
                     ids,
                     chord_points,
                     core_chord_length,
+                    sep_bnd,
+                    ep_space,
                 )
 
                 integ =
@@ -244,7 +181,7 @@ function compute_interferometer!(
     end
 end
 
-function integrand(s::Real, chord_points, sep_bnd, ep_space, cp_n_e, ep_n_e)
+function integrand(s::Real, chord_points, sep_bnd, ep_space, cp_n_e, ep_n_e)::Float64
     r, z = line_of_sight(s, chord_points)
     if (r, z) ∈ (sep_bnd, ep_space)
         return cp_n_e(r, z) * dline(s, chord_points)
@@ -253,25 +190,11 @@ function integrand(s::Real, chord_points, sep_bnd, ep_space, cp_n_e, ep_n_e)
     end
 end
 
-function get_sep_bnd(ep_grid_ggd)
-    ep_space = ep_grid_ggd.space[1]
-    core = get_grid_subset(ep_grid_ggd, 22)
-    sol = get_grid_subset(ep_grid_ggd, 23)
-    sep_bnd = IMAS.edge_profiles__grid_ggd___grid_subset()
-    sep_bnd.element =
-        subset_do(
-            intersect,
-            get_subset_boundary(ep_space, sol),
-            get_subset_boundary(ep_space, core),
-        )
-    return sep_bnd
-end
-
 @inline function rzphi2xyz(
     point::Union{IMAS.interferometer__channel___line_of_sight__first_point,
         IMAS.interferometer__channel___line_of_sight__second_point,
         IMAS.interferometer__channel___line_of_sight__third_point},
-)
+)::Tuple{Float64, Float64, Float64}
     r, z, phi = point.r, point.z, point.phi
     return r * cos(phi), r * sin(phi), z
 end
@@ -279,7 +202,7 @@ end
 @inline function line_of_sight(
     s::Real,
     points::Tuple{T, T},
-) where {T <: Tuple{Float64, Float64, Float64}}
+)::Tuple{Float64, Float64} where {T <: Tuple{Float64, Float64, Float64}}
     fp, sp = points
     x = fp[1] + s * (sp[1] - fp[1])
     y = fp[2] + s * (sp[2] - fp[2])
@@ -290,7 +213,7 @@ end
 @inline function line_of_sight(
     s::Real,
     points::Tuple{T, T, T},
-) where {T <: Tuple{Float64, Float64, Float64}}
+)::Tuple{Float64, Float64} where {T <: Tuple{Float64, Float64, Float64}}
     fp, sp, tp = points
     return if (s <= 0.5)
         line_of_sight(2 * s, (fp, sp))
@@ -301,7 +224,7 @@ end
 
 @inline function dline(
     points::Tuple{T, T},
-) where {T <: Tuple{Float64, Float64, Float64}}
+)::Float64 where {T <: Tuple{Float64, Float64, Float64}}
     fp, sp = points
     return sqrt((sp[1] - fp[1])^2 + (sp[2] - fp[2])^2 + (sp[3] - fp[3])^2)
     # return sqrt(sum((sp[k] - fp[k])^2 for k ∈ eachindex(sp)))
@@ -310,7 +233,7 @@ end
 @inline function dline(
     s::Real,
     points::Tuple{T, T},
-) where {T <: Tuple{Float64, Float64, Float64}}
+)::Float64 where {T <: Tuple{Float64, Float64, Float64}}
     fp, sp = points
     return dline(points)
 end
@@ -318,14 +241,18 @@ end
 @inline function dline(
     s::Real,
     points::Tuple{T, T, T},
-) where {T <: Tuple{Float64, Float64, Float64}}
+)::Float64 where {T <: Tuple{Float64, Float64, Float64}}
     fp, sp, tp = points
     p2, p1 = (s <= 0.5) ? (sp, fp) : (tp, sp)
     return 2 * dline((p2, p1))
     # return sqrt(2 * sum(((p2[k] - p1[k]))^2 for k ∈ eachindex(p2)))
 end
 
-function get_intersections(subset, space, points)
+function get_intersections(
+    subset::IMAS.edge_profiles__grid_ggd___grid_subset,
+    space::IMAS.edge_profiles__grid_ggd___space,
+    points::Union{Tuple{T, T}, Tuple{T, T, T}},
+)::Array{Tuple{Float64, Float64}} where {T <: Tuple{Float64, Float64, Float64}}
     nodes = space.objects_per_dimension[1].object
     edges = space.objects_per_dimension[2].object
     if length(points) == 2
@@ -370,7 +297,7 @@ function intersection_s(
     sp::Tuple{Float64, Float64},
     l1::Tuple{Float64, Float64},
     l2::Tuple{Float64, Float64},
-)
+)::Tuple{Float64, Float64}
     den1 = (sp[1] - fp[1]) * (l2[2] - l1[2]) - (sp[2] - fp[2]) * (l2[1] - l1[1])
     num1 = (sp[1] - fp[1]) * (fp[2] - l1[2]) - (sp[2] - fp[2]) * (fp[1] - l1[1])
     den2 = (l2[1] - l1[1]) * (sp[2] - fp[2]) - (l2[2] - l1[2]) * (sp[1] - fp[1])
@@ -383,7 +310,7 @@ function intersection_s(
     sp::Tuple{Float64, Float64, Float64},
     l1::Tuple{Float64, Float64},
     l2::Tuple{Float64, Float64},
-)
+)::Tuple{Float64, Float64}
     return intersection_s(xyz2rz(fp...), xyz2rz(sp...), l1, l2)
 end
 
@@ -392,11 +319,15 @@ function intersection_s(
     sp::Tuple{Float64, Float64},
     l1::Tuple{Float64, Float64, Float64},
     l2::Tuple{Float64, Float64, Float64},
-)
+)::Tuple{Float64, Float64}
     return intersection_s(fp, sp, xyz2rz(l1...), xyz2rz(l2...))
 end
 
-function get_core_chord_length(sep_bnd, ep_space, chord_points)
+function get_core_chord_length(
+    sep_bnd::IMAS.edge_profiles__grid_ggd___grid_subset,
+    ep_space::IMAS.edge_profiles__grid_ggd___space,
+    chord_points::Union{Tuple{T, T}, Tuple{T, T, T}},
+)::Float64 where {T <: Tuple{Float64, Float64, Float64}}
     chord_in_core = get_intersections(sep_bnd, ep_space, chord_points)
     core_chord_length = 0.0
     for seg ∈ chord_in_core
@@ -406,20 +337,22 @@ function get_core_chord_length(sep_bnd, ep_space, chord_points)
     return core_chord_length
 end
 
-function update_core_chord_length(
-    ii,
-    fix_ep_grid_ggd_idx,
-    ids,
-    chord_points,
-    core_chord_length,
-)
+function update_geometry(
+    ii::Int64,
+    fix_ep_grid_ggd_idx::Bool,
+    ids::IMAS.dd,
+    chord_points::Union{Tuple{T, T}, Tuple{T, T, T}},
+    core_chord_length::Float64,
+    sep_bnd::IMAS.edge_profiles__grid_ggd___grid_subset,
+    ep_space::IMAS.edge_profiles__grid_ggd___space,
+) where {T <: Tuple{Float64, Float64, Float64}}
     if !fix_ep_grid_ggd_idx
         # If grid_ggd is evolving with time, update boundaries
         ep_grid_ggd = ids.edge_profiles.grid_ggd[ii]
         ep_space = ep_grid_ggd.space[1]
         sep_bnd = get_sep_bnd(ep_grid_ggd)
-        return get_core_chord_length(sep_bnd, ep_space, chord_points)
+        return get_core_chord_length(sep_bnd, ep_space, chord_points), sep_bnd, ep_space
     else
-        return core_chord_length
+        return core_chord_length, sep_bnd, ep_space
     end
 end
