@@ -735,8 +735,8 @@ z = line_0[3] + line_dir[3] * s
 
 where s is a real number.
 
-It uses [`compute_intersection_s!`](@ref) to compute the intersection points and
-returns the XYZ coordinates of the intersection points.
+It uses compute_intersection_s to compute the
+intersection points and returns the XYZ coordinates of the intersection points.
 """
 function compute_intersection(
     p1::SVector{2, Float64},

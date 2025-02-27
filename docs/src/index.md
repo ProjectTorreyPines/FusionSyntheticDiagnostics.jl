@@ -28,12 +28,12 @@ compute_bolometer!
 
 Several useful geometrical functions are defined and used here.
 ```@docs
-SynthDiag.FoV
-SynthDiag.get_FoV
-SynthDiag.get_line
-SynthDiag.get_angle
-SynthDiag.get_angle_bisector
-SynthDiag.compute_intersection
+FusionSyntheticDiagnostics.FoV
+FusionSyntheticDiagnostics.get_FoV
+FusionSyntheticDiagnostics.get_line
+FusionSyntheticDiagnostics.get_angle
+FusionSyntheticDiagnostics.get_angle_bisector
+FusionSyntheticDiagnostics.compute_intersection
 ```
 
 ### Interferometer
