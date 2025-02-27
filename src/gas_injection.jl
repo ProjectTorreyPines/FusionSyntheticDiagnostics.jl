@@ -14,7 +14,6 @@ default_gas_injection = "$(@__DIR__)/default_gas_injection.json"
         config::String=default_gas_injection,
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite::Bool=false,
-        verbose::Bool=false,
     )::IMAS.dd
 
 Add gas valves from a JSON file and compute the gas flow rate based on the command
@@ -24,12 +23,11 @@ function add_gas_injection!(
     config::String=default_gas_injection,
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite::Bool=false,
-    verbose::Bool=false,
 )::IMAS.dd
     if endswith(config, ".json")
         config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with import IMASdd as IMAS
         # config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config)) # Use with using IMAS: IMAS
-        add_gas_injection!(config_dict, ids; overwrite=overwrite, verbose=verbose)
+        add_gas_injection!(config_dict, ids; overwrite=overwrite)
     else
         error("Only JSON files are supported.")
     end
@@ -41,7 +39,6 @@ end
         config::Dict{Symbol, Any},
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
         overwrite::Bool=false,
-        verbose::Bool=false,
     )::IMAS.dd
 
 Add gas valves from a dictionary and compute the gas flow rate based on the command
@@ -51,7 +48,6 @@ function add_gas_injection!(
     config::Dict{Symbol, Any},
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
     overwrite::Bool=false,
-    verbose::Bool=false,
 )::IMAS.dd
     # Check for duplicates
     if length(ids.gas_injection.valve) > 0
@@ -90,7 +86,7 @@ function add_gas_injection!(
                 config[:gas_injection],
             )
     end
-    IMAS.dict2imas(config, ids; verbose=verbose)
+    IMAS.dict2imas(config, ids)
     valves = Dict{String, Dict{Symbol, Any}}(
         valve[:name] => valve for valve ∈ config[:gas_injection][:valve]
     )

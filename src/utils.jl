@@ -1,3 +1,4 @@
+import IMASggd: all__grid_ggd, all__grid_subset
 struct OverwriteAttemptError <: Exception
     var::String
 end
@@ -11,7 +12,6 @@ Base.showerror(io::IO, e::OverwriteAttemptError) = print(io, e.var)
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
         channel::Union{Symbol, Vector{Symbol}}=:channel,
         overwrite=false,
-        verbose=false,
     )::IMAS.dd
 
 Add a diagnostic to IMAS structure using a `JSON` file or Julia `Dict`.
@@ -26,7 +26,6 @@ Input arguments:
     interferometer has :channel while langmuir_probes has :embedded and :reciprocating.
   - `overwrite`: If true, even if config has a channel with same name or identifier as
     one present in `ids`, it will be overwritten.
-  - `verbose`: Supplied to IMAS.dict2imas() function.
 """
 function add_diagnostic!(
     config::String,
@@ -34,7 +33,6 @@ function add_diagnostic!(
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
     channel::Union{Symbol, Vector{Symbol}}=:channel,
     overwrite=false,
-    verbose=false,
 )::IMAS.dd
     if endswith(config, ".json")
         config_dict = convert_strings_to_symbols(IMAS.IMASdd.JSON.parsefile(config))
@@ -44,7 +42,6 @@ function add_diagnostic!(
             ids;
             channel=channel,
             overwrite=overwrite,
-            verbose=verbose,
         )
     else
         error("Only JSON files are supported.")
@@ -58,7 +55,6 @@ function add_diagnostic!(
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
     channel::Union{Symbol, Vector{Symbol}}=:channel,
     overwrite=false,
-    verbose=false,
 )::IMAS.dd
     if isa(channel, Vector)
         for chan ∈ channel
@@ -68,7 +64,6 @@ function add_diagnostic!(
                 ids;
                 channel=chan,
                 overwrite=overwrite,
-                verbose=verbose,
             )
         end
         return ids
@@ -120,7 +115,7 @@ function add_diagnostic!(
             config[diagnostic],
         )
     end
-    IMAS.dict2imas(config, ids; verbose=verbose)
+    IMAS.dict2imas(config, ids)
     return ids
 end
 
@@ -154,16 +149,7 @@ end
     return r, z
 end
 
-all_grid_ggd = Union{IMAS.edge_profiles__grid_ggd, IMAS.radiation__grid_ggd}
-
-all_subset_element = Union{
-    IMAS.edge_profiles__grid_ggd___grid_subset___element,
-    IMAS.radiation__grid_ggd___grid_subset___element,
-}
-
-function get_sep_bnd_elements(
-    grid_ggd::all_grid_ggd,
-)::AbstractVector{<:all_subset_element}
+function get_sep_bnd(grid_ggd::all__grid_ggd)::all__grid_subset
     space = grid_ggd.space[1]
     core = get_grid_subset(grid_ggd, 22)
     sol = get_grid_subset(grid_ggd, 23)
@@ -174,26 +160,10 @@ function get_sep_bnd_elements(
     )
 end
 
-function get_sep_bnd(
-    grid_ggd::IMAS.edge_profiles__grid_ggd,
-)::IMAS.edge_profiles__grid_ggd___grid_subset
-    sep_bnd = IMAS.edge_profiles__grid_ggd___grid_subset()
-    sep_bnd.element = get_sep_bnd_elements(grid_ggd)
-    return sep_bnd
-end
-
-function get_sep_bnd(
-    grid_ggd::IMAS.radiation__grid_ggd,
-)::IMAS.radiation__grid_ggd___grid_subset
-    sep_bnd = IMAS.radiation__grid_ggd___grid_subset()
-    sep_bnd.element = get_sep_bnd_elements(grid_ggd)
-    return sep_bnd
-end
-
 function update_TPS_mats(
     ii::Int64,
     fix_grid_ggd_idx::Bool,
-    grid_ggd::AbstractVector{<:all_grid_ggd},
+    grid_ggd::AbstractVector{<:all__grid_ggd},
     gsi::Int64,
     TPS_mats::Tuple{Matrix{U}, Matrix{U}, Matrix{U}, Vector{Tuple{U, U}}},
 )::Tuple{Matrix{U}, Matrix{U}, Matrix{U}, Vector{Tuple{U, U}}} where {U <: Real}

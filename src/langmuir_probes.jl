@@ -9,7 +9,7 @@ default_lp = "$(@__DIR__)/default_langmuir_probes.json"
     add_langmuir_probes!(
         config::Union{String, Dict{Symbol, Any}}=default_lp,
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
-        overwrite=false, verbose=false, kwargs...,
+        overwrite::Bool=false, kwargs...,
     )::IMAS.dd
 
 Add langmuir probes positions and other parameters from `JSON` file or Julia `Dict` to
@@ -19,14 +19,13 @@ passed to [`compute_langmuir_probes!`](@ref).
 function add_langmuir_probes!(
     config::Union{String, Dict{Symbol, Any}}=default_lp,
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite=false, verbose=false, kwargs...,
+    overwrite::Bool=false, kwargs...,
 )::IMAS.dd
     add_diagnostic!(
         config,
         :langmuir_probes,
         ids;
         overwrite=overwrite,
-        verbose=verbose,
         channel=[:embedded, :reciprocating],
     )
     compute_langmuir_probes!(ids; kwargs...)
@@ -99,7 +98,13 @@ function compute_langmuir_probes!(
     ep_t_e_list = Array{Function}(undef, nt)
     ep_t_i_list = Array{Function}(undef, nt)
     for ii ∈ eachindex(epggd)
-        TPS_mats_ii = update_TPS_mats(ii, fix_ep_grid_ggd_idx, ids, n_e_gsi, TPS_mats)
+        TPS_mats_ii = update_TPS_mats(
+            ii,
+            fix_ep_grid_ggd_idx,
+            ids.edge_profiles.grid_ggd,
+            n_e_gsi,
+            TPS_mats,
+        )
         ep_n_e_list[ii] = interp(epggd[ii].electrons.density, TPS_mats_ii, n_e_gsi)
         ep_t_e_list[ii] = interp(epggd[ii].electrons.temperature, TPS_mats_ii, n_e_gsi)
         ep_t_i_list[ii] = interp(epggd[ii].t_i_average, TPS_mats_ii, n_e_gsi)
@@ -277,7 +282,52 @@ function langmuir_probe_current(
     return i_probe
 end
 
-lp_data_types = Union{get_types_with(IMAS.langmuir_probes, :data)...}
+lp_data_types =
+    Union{
+        IMAS.langmuir_probes__embedded___b_field_angle{T},
+        IMAS.langmuir_probes__embedded___distance_separatrix_midplane{T},
+        IMAS.langmuir_probes__embedded___fluence{T},
+        IMAS.langmuir_probes__embedded___heat_flux_parallel{T},
+        IMAS.langmuir_probes__embedded___ion_saturation_current{T},
+        IMAS.langmuir_probes__embedded___j_i_parallel{T},
+        IMAS.langmuir_probes__embedded___j_i_parallel_sigma{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation_kurtosis{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation_sigma{T},
+        IMAS.langmuir_probes__embedded___j_i_saturation_skew{T},
+        IMAS.langmuir_probes__embedded___multi_temperature_fits___t_e{T},
+        IMAS.langmuir_probes__embedded___multi_temperature_fits___t_i{T},
+        IMAS.langmuir_probes__embedded___n_e{T},
+        IMAS.langmuir_probes__embedded___surface_area_effective{T},
+        IMAS.langmuir_probes__embedded___t_e{T},
+        IMAS.langmuir_probes__embedded___t_i{T},
+        IMAS.langmuir_probes__embedded___v_floating{T},
+        IMAS.langmuir_probes__embedded___v_floating_sigma{T},
+        IMAS.langmuir_probes__embedded___v_plasma{T},
+        IMAS.langmuir_probes__reciprocating___plunge___b_field_angle{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___heat_flux_parallel{
+            T,
+        },
+        IMAS.langmuir_probes__reciprocating___plunge___collector___ion_saturation_current{
+            T,
+        },
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_kurtosis{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_parallel{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_saturation{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_sigma{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___j_i_skew{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___t_e{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___t_i{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___v_floating{T},
+        IMAS.langmuir_probes__reciprocating___plunge___collector___v_floating_sigma{T},
+        IMAS.langmuir_probes__reciprocating___plunge___distance_separatrix_midplane{T},
+        IMAS.langmuir_probes__reciprocating___plunge___distance_x_point_z{T},
+        IMAS.langmuir_probes__reciprocating___plunge___mach_number_parallel{T},
+        IMAS.langmuir_probes__reciprocating___plunge___n_e{T},
+        IMAS.langmuir_probes__reciprocating___plunge___t_e_average{T},
+        IMAS.langmuir_probes__reciprocating___plunge___t_i_average{T},
+        IMAS.langmuir_probes__reciprocating___plunge___v_plasma{T},
+    } where {T <: Real}
 
 """
     init_data!(q::lp_data_types, nt::Int64)

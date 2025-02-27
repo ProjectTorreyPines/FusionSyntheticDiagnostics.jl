@@ -99,11 +99,8 @@ default_bolometer = "$(@__DIR__)/default_bolometer.json"
 """
     add_bolometer!(
         config::Union{String, Dict{Symbol, Any}}=default_bolometer,
-
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
-
-        overwrite::Bool=false, verbose::Bool=false, kwargs...,
-
+        overwrite::Bool=false, kwargs...,
     )::IMAS.dd
 
 Add bolometer to IMAS structure using a `JSON` file or Julia `Dict` and compute the
@@ -112,9 +109,9 @@ bolometer outputs. `kwargs` are passed to [`compute_bolometer!`](@ref).
 function add_bolometer!(
     config::Union{String, Dict{Symbol, Any}}=default_bolometer,
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite::Bool=false, verbose::Bool=false, kwargs...,
+    overwrite::Bool=false, kwargs...,
 )::IMAS.dd
-    add_diagnostic!(config, :bolometer, ids; overwrite=overwrite, verbose=verbose)
+    add_diagnostic!(config, :bolometer, ids; overwrite=overwrite)
     compute_bolometer!(ids; kwargs...)
     return ids
 end

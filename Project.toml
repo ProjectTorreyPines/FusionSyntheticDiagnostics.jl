@@ -1,7 +1,7 @@
 name = "FusionSyntheticDiagnostics"
 uuid = "c6e34158-aa22-49e4-bb12-15cbcb518ce6"
 authors = ["Anchal Gupta <guptaa@fusion.gat.com>"]
-version = "2.0.1"
+version = "2.1.0"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -30,7 +30,7 @@ DSP = "0.7.9, 0.8"
 DelimitedFiles = "1.9.1"
 HCubature = "1.7"
 IMAS = "1.2.2, 2, 3"
-IMASggd = "2"
+IMASggd = "3.1.0"
 Interpolations = "0.15.1"
 LsqFit = "0.15.0"
 PhysicalConstants = "0.2.3"

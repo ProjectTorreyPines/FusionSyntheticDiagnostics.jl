@@ -11,7 +11,7 @@ default_ifo = "$(@__DIR__)/default_interferometer.json"
     add_interferometer!(
         config::Union{String, Dict{Symbol, Any}}=default_ifo,
         @nospecialize(ids::IMAS.dd)=IMAS.dd();
-        overwrite::Bool=false, verbose::Bool=false, kwargs...,
+        overwrite::Bool=false, kwargs...,
     )::IMAS.dd
 
 Add interferometer to IMAS structure using a `JSON` file or Julia `Dict` and compute
@@ -21,9 +21,9 @@ the line integrated electron density if not present. `kwargs` are passed to
 function add_interferometer!(
     config::Union{String, Dict{Symbol, Any}}=default_ifo,
     @nospecialize(ids::IMAS.dd)=IMAS.dd();
-    overwrite::Bool=false, verbose::Bool=false, kwargs...,
+    overwrite::Bool=false, kwargs...,
 )::IMAS.dd
-    add_diagnostic!(config, :interferometer, ids; overwrite=overwrite, verbose=verbose)
+    add_diagnostic!(config, :interferometer, ids; overwrite=overwrite)
     compute_interferometer!(ids; kwargs...)
     return ids
 end
