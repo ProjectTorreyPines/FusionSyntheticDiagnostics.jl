@@ -12,7 +12,7 @@ function compute_flux_loops!(
     PSI_interpolant::Interpolations.AbstractInterpolation,
     loops::IMAS.IDSvector{IMAS.magnetics__flux_loop{T}},
 ) where {T <: Real}
-
+    #
     if isempty(loops)
         return T[]
     end
@@ -22,7 +22,7 @@ function compute_flux_loops!(
     z = [loop.position.z for loop ∈ loops]
 
     # psi at the loop positions
-    psi = PSI_interpolant.(r,z)
+    psi = PSI_interpolant.(r, z)
 
     # update dd with synthetic data
     for (k, p) ∈ enumerate(psi)

@@ -12,7 +12,7 @@ function compute_magnetic_probes!(
     PSI_interpolant::Interpolations.AbstractInterpolation,
     probes::IMAS.IDSvector{IMAS.magnetics__b_field_pol_probe{T}},
 ) where {T <: Real}
-
+    #
     if isempty(probes)
         return T[]
     end
