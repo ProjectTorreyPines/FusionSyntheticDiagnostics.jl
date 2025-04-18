@@ -56,17 +56,10 @@ function add_diagnostic!(
     channel::Union{Symbol, Vector{Symbol}}=:channel,
     overwrite=false,
 )::IMAS.dd
-    if isa(channel, Vector)
-        for chan ∈ channel
-            add_diagnostic!(
-                config,
-                diagnostic,
-                ids;
-                channel=chan,
-                overwrite=overwrite,
-            )
-        end
-        return ids
+    if isa(channel, Symbol)
+        channels = [channel]
+    else
+        channels = channel
     end
     diag_name = String(diagnostic)
     if !haskey(config, diagnostic)
@@ -74,46 +67,49 @@ function add_diagnostic!(
         return ids
     end
     ids_diag = getproperty(ids, diagnostic)
-    ids_diag_channels = getproperty(ids_diag, channel)
-    if length(ids_diag_channels) > 0
-        duplicate_indices = []
-        new_channels = Dict(
-            ch[:name] => ch[:identifier] for
-            ch ∈ config[diagnostic][channel]
-        )
-        for (ii, ch) ∈ enumerate(ids_diag_channels)
-            if ch.name in keys(new_channels) ||
-               ch.identifier in values(new_channels)
-                append!(duplicate_indices, ii)
-            end
-        end
-        if overwrite
-            for ii ∈ reverse(duplicate_indices)
-                println(
-                    "Overwriting " * diag_name * " channel ",
-                    "$(ids_diag_channels[ii].name)...",
-                )
-                deleteat!(ids_diag_channels, ii)
-            end
-        else
-            if length(duplicate_indices) > 0
-                err_msg =
-                    "Duplicate " * diag_name * " channels found with " *
-                    "overlapping names or identifiers.\n" * "Identifier: Name\n"
-                for ii ∈ duplicate_indices
-                    err_msg *=
-                        "$(ids_diag_channels[ii].identifier): " *
-                        "$(ids_diag_channels[ii].name)\n"
+    duplicate_indices = Dict{Symbol, Vector{Int}}()
+    for channel ∈ channels
+        ids_diag_channels = getproperty(ids_diag, channel)
+        if length(ids_diag_channels) > 0
+            duplicate_indices[channel] = []
+            new_channels = Dict(
+                ch[:name] => ch[:identifier] for
+                ch ∈ config[diagnostic][channel]
+            )
+            for (ii, ch) ∈ enumerate(ids_diag_channels)
+                if ch.name in keys(new_channels) ||
+                   ch.identifier in values(new_channels)
+                    append!(duplicate_indices[channel], ii)
                 end
-                err_msg *= "Use overwrite=true to replace them."
-                throw(OverwriteAttemptError(err_msg))
             end
+            if overwrite
+                for ii ∈ reverse(duplicate_indices[channel])
+                    println(
+                        "Overwriting " * diag_name * " channel ",
+                        "$(ids_diag_channels[ii].name)...",
+                    )
+                    deleteat!(ids_diag_channels, ii)
+                end
+            else
+                if length(duplicate_indices[channel]) > 0
+                    err_msg =
+                        "Duplicate " * diag_name * " channels found with " *
+                        "overlapping names or identifiers.\n" * "Identifier: Name\n"
+                    for ii ∈ duplicate_indices[channel]
+                        err_msg *=
+                            "$(ids_diag_channels[ii].identifier): " *
+                            "$(ids_diag_channels[ii].name)\n"
+                    end
+                    err_msg *= "Use overwrite=true to replace them."
+                    throw(OverwriteAttemptError(err_msg))
+                end
+            end
+            config[diagnostic] = mergewith(
+                append!,
+                IMAS.imas2dict(ids_diag),
+                config[diagnostic],
+            )
         end
-        config[diagnostic] = mergewith(
-            append!,
-            IMAS.imas2dict(ids_diag),
-            config[diagnostic],
-        )
     end
     IMAS.dict2imas(config, ids)
     return ids

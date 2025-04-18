@@ -1,6 +1,6 @@
 using FusionSyntheticDiagnostics: IMAS, add_interferometer!, add_langmuir_probes!,
-    add_gas_injection!,
-    compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
+    add_magnetics!, add_gas_injection!, compute_gas_injection!,
+    get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current
 using IMAS: json2imas
 using Test
@@ -19,6 +19,9 @@ function parse_commandline()
             :action => :store_true),
         ["--langmuir_probes"],
         Dict(:help => "Test only langmuir probes",
+            :action => :store_true),
+        ["--magnetics"],
+        Dict(:help => "Test only magnetic diagnostics",
             :action => :store_true),
         ["--gas_injection"],
         Dict(:help => "Test only gas injection",
@@ -182,6 +185,13 @@ if args["langmuir_probes"]
         annotate!(-100, 300, details)
         savefig("$(@__DIR__)/langmuir_probe_iv.png")
         @test true
+    end
+end
+
+if args["magnetics"]
+    @testset "magnetics" begin
+        ids = add_magnetics!("$(@__DIR__)/../samples/D3D_magnetics.json")
+        @test true  # Just testing if it loads the magnetics information for now
     end
 end
 
