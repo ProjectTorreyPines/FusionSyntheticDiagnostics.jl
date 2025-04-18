@@ -47,7 +47,7 @@ in keywords.
 For `b_field_pol_probe` and `flux_loops`,
 `PSI_interpolant::AbstractInterpolation` is required which can be
 obtained by calling
-[IMAS.Ψ_interpolant](https://projecttorreypines.github.io/IMAS.jl/dev/api/#IMAS.%CF%88_interpolant)
+[`IMAS.ψ_interpolant`](https://projecttorreypines.github.io/IMAS.jl/dev/api/#IMAS.%CF%88_interpolant)
 """
 function compute_magnetics!(@nospecialize(ids::IMAS.dd)=IMAS.dd(); kwargs...)
     for probe ∈ magnetic_probe_types

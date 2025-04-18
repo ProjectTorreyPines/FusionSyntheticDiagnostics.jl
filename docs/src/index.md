@@ -55,6 +55,15 @@ compute_langmuir_probes!
 langmuir_probe_current
 ```
 
+### Magnetics
+
+Magnetics can be added using IMAS compatible `JSON` file that describes the metadata and positions of Magntic field probes for poloidal and toroidal fields, flux loops, Rogowski coils, and shunts. Computation is currently supported for poloidal magnetic field probes and flux loops only which uses [IMAS physics flux-surfaces](https://projecttorreypines.github.io/IMAS.jl/dev/api/#Physics-flux-surfaces) functions to compute the fields and report them. As such, these diagnostic implementations are only reporting stored IMAS data in the format a real diagnostic would do, but they do not involve physical modeling or noise of the diagnostic as of now.
+
+```@docs
+add_magnetics!
+compute_magnetics!
+```
+
 ## Synthetic Actuators
 
 ### Gas Injection
