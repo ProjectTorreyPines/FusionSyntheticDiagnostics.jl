@@ -283,7 +283,7 @@ function get_intersections(
     append!(segs, 1.0)
     sort!(segs)
     filt_segs = Tuple{Float64, Float64}[]
-    for ii ∈ 1:length(segs)-1
+    for ii ∈ 1:(length(segs)-1)
         check_at = (segs[ii] + segs[ii+1]) / 2
         if line_of_sight(check_at, points) ∈ (subset, space)
             append!(filt_segs, [(segs[ii], segs[ii+1])])

@@ -231,9 +231,9 @@ function compute_gas_injection(
             flow_rate = filt(LPF, flow_rate, create_si(LPF, flow_rate[1]))
         end
         flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
-        future_flow_rates = flow_rate[end-skip+2:end]
-        flow_rate[1:skip-1] .= 0.0
-        flow_rate[skip:end] = flow_rate[1:end-skip+1]
+        future_flow_rates = flow_rate[(end-skip+2):end]
+        flow_rate[1:(skip-1)] .= 0.0
+        flow_rate[skip:end] = flow_rate[1:(end-skip+1)]
     else
         future_flow_rates = nothing
     end
@@ -462,7 +462,7 @@ function downsample_smooth(
     data_res = zeros(length(tt_res))
     last_time = -Inf
     for ii ∈ eachindex(data_res)
-        snap = data[(tt.>last_time).&(tt.<=tt_res[ii])]
+        snap = data[(tt .> last_time) .& (tt .<= tt_res[ii])]
 
         if length(snap) == 0
             if ii > 1
@@ -577,7 +577,7 @@ function get_gas_injection_response(
     latency_len = round(Int, latency / resample_dt)
 
     # Shift cmd forward by latency to match P_ves
-    cmd = [zeros(latency_len); cmd[1:end-latency_len]]
+    cmd = [zeros(latency_len); cmd[1:(end-latency_len)]]
 
     # Accumulated gas in vessel
     acc_gas = V_ves * P_ves  # m^3 * Pa
@@ -585,8 +585,8 @@ function get_gas_injection_response(
     # Fit the gas injection model to the data
     fit = curve_fit(
         int_gi_model,
-        cmd[acc_gas.>0],
-        acc_gas[acc_gas.>0] / resample_dt,
+        cmd[acc_gas .> 0],
+        acc_gas[acc_gas .> 0] / resample_dt,
         gi_fit_guess,
     )
 

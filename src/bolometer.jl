@@ -275,9 +275,8 @@ function compute_bolometer!(
         for (ti, t) ∈ enumerate(ids.radiation.time)
             ch.power.time[ti] = t
             integ =
-                let ch = ch, XYZ2det = XYZ2det, ap2XYZ = ap2XYZ,
-                    fov_segs = fov_segs, s_segs = s_segs,
-                    sep_bnd = sep_bnds[ti], rad_space = rad_spaces[ti],
+                let ch = ch, XYZ2det = XYZ2det, ap2XYZ = ap2XYZ, fov_segs = fov_segs,
+                    s_segs = s_segs, sep_bnd = sep_bnds[ti], rad_space = rad_spaces[ti],
                     core_rad = core_rad[ti], edge_rad = edge_rad[ti],
                     reflection_coefficient = reflection_coefficient
 
@@ -1252,7 +1251,7 @@ function create_outline!(
             det_or_ap.surface = area(det_or_ap.outline)
         end
     elseif det_or_ap.geometry_type == 2
-        angles = range(0, 2π; length=c2o_nop)[1:end-1]
+        angles = range(0, 2π; length=c2o_nop)[1:(end-1)]
         det_or_ap.outline.x1 = det_or_ap.radius .* cos.(angles)
         det_or_ap.outline.x2 = det_or_ap.radius .* sin.(angles)
         if IMAS.ismissing(det_or_ap, :surface)

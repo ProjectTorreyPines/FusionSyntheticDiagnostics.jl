@@ -240,7 +240,7 @@ function test_gas_response(config, excitation, plot_title, figname; fit=false)
         tt_over_lat = findall(x -> x > gasd_model[:latency] + tt0, cmd_tt)
         if length(tt_over_lat) > 0
             skip = tt_over_lat[1]
-            flow_rate[skip:end] = valve_response.(cmd[1:end-skip+1])
+            flow_rate[skip:end] = valve_response.(cmd[1:(end-skip+1)])
             flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
         end
 
