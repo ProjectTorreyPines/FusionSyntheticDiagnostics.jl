@@ -1,6 +1,6 @@
 using FusionSyntheticDiagnostics: IMAS, add_interferometer!, add_langmuir_probes!,
-    add_gas_injection!,
-    compute_gas_injection!, get_gas_injection_response, Noise, OverwriteAttemptError,
+    add_magnetics!, add_gas_injection!, compute_gas_injection!,
+    get_gas_injection_response, Noise, OverwriteAttemptError,
     langmuir_probe_current
 using IMAS: json2imas
 using Test
@@ -8,7 +8,8 @@ using Printf
 using Plots
 using ArgParse: ArgParse
 using DelimitedFiles: readdlm
-using Interpolations: linear_interpolation
+using Interpolations: linear_interpolation, Flat
+using Statistics: mean
 
 function parse_commandline()
     s = ArgParse.ArgParseSettings(; description="Run tests. Default is all tests.")
@@ -19,6 +20,9 @@ function parse_commandline()
             :action => :store_true),
         ["--langmuir_probes"],
         Dict(:help => "Test only langmuir probes",
+            :action => :store_true),
+        ["--magnetics"],
+        Dict(:help => "Test only magnetic diagnostics",
             :action => :store_true),
         ["--gas_injection"],
         Dict(:help => "Test only gas injection",
@@ -185,6 +189,78 @@ if args["langmuir_probes"]
     end
 end
 
+if args["magnetics"]
+    @testset "magnetics" begin
+        ids_exp = json2imas("$(@__DIR__)/../samples/D3D_magnetics_exp_data.json")
+        ids_eq = json2imas("$(@__DIR__)/../samples/D3D_equilibrium.json")
+        ids = add_magnetics!(
+            "$(@__DIR__)/../samples/D3D_magnetics.json";
+            equilibrium=ids_eq.equilibrium,
+        )
+        flux_rrms_err = zeros(length(ids_exp.magnetics.flux_loop))
+        for k ∈ eachindex(ids_exp.magnetics.flux_loop)
+            exp_data = linear_interpolation(
+                ids_exp.magnetics.flux_loop[k].flux.time,
+                ids_exp.magnetics.flux_loop[k].flux.data;
+                extrapolation_bc=Flat(),
+            )
+            loop = ids.magnetics.flux_loop[1]
+            for lp ∈ ids.magnetics.flux_loop
+                if lp.identifier == ids_exp.magnetics.flux_loop[k].identifier
+                    loop = lp
+                    break
+                end
+            end
+            exp_data_int = exp_data.(loop.flux.time)
+            err = loop.flux.data - exp_data_int
+            rel_err = err ./ exp_data_int
+            flux_rrms_err[k] = sqrt.(mean(rel_err .^ 2))
+
+            plot(ids_exp.magnetics.flux_loop[k].flux.time,
+                ids_exp.magnetics.flux_loop[k].flux.data;
+                label="Experimental Data")
+            plot!(loop.flux.time, loop.flux.data;
+                label="Synthetic Flux Loop", linewidth=2, linestyle=:dash,
+            )
+            plot!(; title="Flux Loop " * loop.identifier,
+                xlabel="Time / s", ylabel="Flux / Wb")
+            savefig("$(@__DIR__)/flux_loop_$(k).png")
+        end
+        @test all(flux_rrms_err .<= 0.004)
+
+        probe_rrms_err = zeros(length(ids_exp.magnetics.b_field_pol_probe))
+        for k ∈ eachindex(ids_exp.magnetics.b_field_pol_probe)
+            exp_data = linear_interpolation(
+                ids_exp.magnetics.b_field_pol_probe[k].field.time,
+                ids_exp.magnetics.b_field_pol_probe[k].field.data;
+                extrapolation_bc=Flat(),
+            )
+            probe = ids.magnetics.b_field_pol_probe[1]
+            for pb ∈ ids.magnetics.b_field_pol_probe
+                if pb.identifier == ids_exp.magnetics.b_field_pol_probe[k].identifier
+                    probe = pb
+                    break
+                end
+            end
+            exp_data_int = exp_data.(probe.field.time)
+            err = probe.field.data - exp_data_int
+            rel_err = err ./ exp_data_int
+            probe_rrms_err[k] = sqrt.(mean(rel_err .^ 2))
+
+            plot(ids_exp.magnetics.b_field_pol_probe[k].field.time,
+                ids_exp.magnetics.b_field_pol_probe[k].field.data;
+                label="Experimental Data")
+            plot!(probe.field.time, probe.field.data;
+                label="Synthetic Probe", linewidth=2, linestyle=:dash,
+            )
+            plot!(; title="B Field Poloidal Probe " * probe.identifier,
+                xlabel="Time / s", ylabel="Field / T")
+            savefig("$(@__DIR__)/b_field_pol_probe_$(k).png")
+        end
+        @test all(probe_rrms_err .<= 0.002)
+    end
+end
+
 function test_gas_response(config, excitation, plot_title, figname; fit=false)
     ids = IMAS.dd()
     add_gas_injection!(config, ids)
@@ -240,7 +316,7 @@ function test_gas_response(config, excitation, plot_title, figname; fit=false)
         tt_over_lat = findall(x -> x > gasd_model[:latency] + tt0, cmd_tt)
         if length(tt_over_lat) > 0
             skip = tt_over_lat[1]
-            flow_rate[skip:end] = valve_response.(cmd[1:end-skip+1])
+            flow_rate[skip:end] = valve_response.(cmd[1:(end-skip+1)])
             flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
         end
 
