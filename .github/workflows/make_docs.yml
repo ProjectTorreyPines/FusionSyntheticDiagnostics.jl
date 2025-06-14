@@ -1,19 +1,19 @@
 name: Make Docs
 on:
+  workflow_dispatch:  # Manually trigger
   push:
-    branches: ["master", "reuse_ci"]
+    branches: master
     paths:
       - '.github/workflows/make_docs.yml'
       - 'src/**'
       - 'docs/**'
     tags: '*'
   pull_request:
-    branches: ["master"]
+    branches: master
     paths:
       - '.github/workflows/make_docs.yml'
       - 'src/**'
       - 'docs/**'
-  workflow_dispatch:
     
 jobs:
   make_docs:

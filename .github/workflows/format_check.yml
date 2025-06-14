@@ -1,13 +1,14 @@
 name: Format Check
 
 on:
+  workflow_dispatch:  # Manually trigger
   push:
-    branches: ["master", "reuse_ci"]
+    branches: master
     paths:
       - '.github/workflows/format_check.yml'
       - '**.jl'
   pull_request:
-    branches: ["master"]
+    branches: master
     paths:
       - '.github/workflows/format_check.yml'
       - '**.jl'
