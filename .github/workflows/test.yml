@@ -1,15 +1,16 @@
 name: Test
 
 on:
+  workflow_dispatch:  # Manually trigger
   push:
-    branches: ["master", "reuse_ci"]
+    branches: master
     paths:
       - '.github/workflows/test.yml'
       - 'src/**'
       - 'test/**'
       - 'Project.toml'
   pull_request:
-    branches: ["master"]
+    branches: master
     paths:
       - '.github/workflows/test.yml'
       - 'src/**'
