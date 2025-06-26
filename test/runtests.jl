@@ -1,47 +1,16 @@
 using FusionSyntheticDiagnostics: IMAS, add_interferometer!, add_langmuir_probes!,
     add_magnetics!, add_gas_injection!, compute_gas_injection!,
     get_gas_injection_response, Noise, OverwriteAttemptError,
-    langmuir_probe_current
-using IMAS: json2imas
+    langmuir_probe_current, linear_interpolation, Flat, mean
 using Test
 using Printf
 using Plots
-using ArgParse: ArgParse
 using DelimitedFiles: readdlm
-using Interpolations: linear_interpolation, Flat
-using Statistics: mean
 
-function parse_commandline()
-    s = ArgParse.ArgParseSettings(; description="Run tests. Default is all tests.")
-
-    ArgParse.add_arg_table!(s,
-        ["--interferometer"],
-        Dict(:help => "Test only interferometer",
-            :action => :store_true),
-        ["--langmuir_probes"],
-        Dict(:help => "Test only langmuir probes",
-            :action => :store_true),
-        ["--magnetics"],
-        Dict(:help => "Test only magnetic diagnostics",
-            :action => :store_true),
-        ["--gas_injection"],
-        Dict(:help => "Test only gas injection",
-            :action => :store_true),
-    )
-    args = ArgParse.parse_args(s)
-    if !any(values(args)) # If no flags are set, run all tests
-        for k ∈ keys(args)
-            args[k] = true
-        end
-    end
-    return args
-end
-args = parse_commandline()
-
-if args["interferometer"]
+if isempty(ARGS) || "ifo" in ARGS
     @testset "interferometer" begin
         ids =
-            json2imas(
+            IMAS.json2imas(
                 "$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json",
             )
         add_interferometer!(
@@ -117,10 +86,10 @@ if args["interferometer"]
     end
 end
 
-if args["langmuir_probes"]
+if isempty(ARGS) || "langmuir" in ARGS
     @testset "langmuir_probes" begin
         ids =
-            json2imas(
+            IMAS.json2imas(
                 "$(@__DIR__)/../samples/time_dep_edge_profiles_with_equilibrium.json",
             )
         # Assume a 5% noise level in ne values
@@ -189,10 +158,10 @@ if args["langmuir_probes"]
     end
 end
 
-if args["magnetics"]
+if isempty(ARGS) || "magnetics" in ARGS
     @testset "magnetics" begin
-        ids_exp = json2imas("$(@__DIR__)/../samples/D3D_magnetics_exp_data.json")
-        ids_eq = json2imas("$(@__DIR__)/../samples/D3D_equilibrium.json")
+        ids_exp = IMAS.json2imas("$(@__DIR__)/../samples/D3D_magnetics_exp_data.json")
+        ids_eq = IMAS.json2imas("$(@__DIR__)/../samples/D3D_equilibrium.json")
         ids = add_magnetics!(
             "$(@__DIR__)/../samples/D3D_magnetics.json";
             equilibrium=ids_eq.equilibrium,
@@ -369,7 +338,7 @@ function test_gas_response(config, excitation, plot_title, figname; fit=false)
     return savefig(figname)
 end
 
-if args["gas_injection"]
+if isempty(ARGS) || "gas" in ARGS
     @testset "gas_injection" begin
         config = "$(@__DIR__)/../src/default_gas_injection.json"
         sine_excitation(t) = 0.3 * cos.(2 * pi * 2 * t) .+ 0.3
