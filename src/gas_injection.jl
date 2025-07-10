@@ -228,7 +228,8 @@ function compute_gas_injection(
             )
         end
         if !isnothing(LPF)
-            flow_rate = filt(LPF, flow_rate, create_si(LPF, flow_rate[1]))
+            flow_rate =
+                filt(DF2TFilter(LPF, copy(create_si(LPF, flow_rate[1]))), flow_rate)
         end
         flow_rate = map((x)::Float64 -> x < 0.0 ? 0.0 : x, flow_rate)
         future_flow_rates = flow_rate[(end-skip+2):end]
