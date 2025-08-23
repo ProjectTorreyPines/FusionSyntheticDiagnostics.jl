@@ -3,7 +3,7 @@ import PhysicalConstants.CODATA2018: c_0, ε_0, m_e, m_u, e
 import QuadGK: quadgk, BatchIntegrand
 import IMASggd: interp, get_grid_subset, get_subset_boundary, subset_do, get_TPS_mats
 
-export add_interferometer!, compute_interferometer!, compute_interferometer
+export add_interferometer!, compute_interferometer!
 
 default_ifo = "$(@__DIR__)/default_interferometer.json"
 
